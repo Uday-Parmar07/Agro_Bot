@@ -1,6 +1,6 @@
 from tavily import TavilyClient
 
-tavily = TavilyClient(api_key="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")
+tavily = TavilyClient(api_key="")
 
 response = tavily.search(
     query="government schemes for farmers Madhya Pradesh",
