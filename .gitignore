@@ -218,5 +218,9 @@ agrobot-assistant/frontend/.cache/
 agrobot-assistant/frontend/.parcel-cache/
 agrobot-assistant/frontend/.eslintcache
 
+# Local ML/data assets
+agrobot-assistant/backend/Plant_Disease/
+agrobot-assistant/backend/experiments.ipynb
+
 # TypeScript incremental build info (safe even if TS added later)
 *.tsbuildinfo
