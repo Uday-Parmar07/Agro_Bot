@@ -1,6 +1,7 @@
+import os
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, questionnaire, recommendations
+from app.routers import auth, questionnaire, recommendations, disease
 from app.database.connection import create_tables
 
 app = FastAPI(
@@ -9,10 +10,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware for React frontend
+# CORS middleware for frontend
+cors_origins = os.getenv("CORS_ORIGINS", "").strip()
+allow_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React dev server
+    allow_origins=allow_origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,6 +27,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(questionnaire.router, prefix="/api/questionnaire", tags=["Questionnaire"])
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["AI Recommendations"])
+app.include_router(disease.router, prefix="/api/disease", tags=["Disease Checkup"])
 
 @app.on_event("startup")
 async def startup_event():

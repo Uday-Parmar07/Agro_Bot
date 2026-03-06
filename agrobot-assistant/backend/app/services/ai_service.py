@@ -15,13 +15,16 @@ class AIService:
     def __init__(self):
         load_dotenv()
         api_key = os.getenv("GROQ_API_KEY")
+        self.client = Groq(api_key=api_key) if api_key else None
         if not api_key:
-            raise RuntimeError("GROQ_API_KEY is not set; add it to your environment or .env file.")
-        self.client = Groq(api_key=api_key)
+            logger.warning("GROQ_API_KEY is not set; using fallback recommendation mode.")
         
     async def generate_farming_recommendations(self, user_data: Dict[str, Any]) -> AIRecommendationResponse:
         # Generate comprehensive prompt from user questionnaire data
         prompt = generate_farming_prompt(user_data)
+
+        if self.client is None:
+            return self._generate_fallback_response(user_data)
         
         try:
             # Call Groq API with Llama model

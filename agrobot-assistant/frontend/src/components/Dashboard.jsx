@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Leaf, Cloud, Settings, Home, TrendingUp, Plus, Loader } from 'lucide-react';
+import { BarChart3, Leaf, Cloud, Settings, Home, TrendingUp, Plus, Loader, Activity } from 'lucide-react';
 import CropMonitor from './CropMonitor';
 import WeatherWidget from './WeatherWidget';
 import AddCropModal from './AddCropModal';
@@ -301,6 +301,13 @@ const Dashboard = () => {
           >
             <BarChart3 size={18} />
             <span>Analytics</span>
+          </button>
+          <button
+            className="nav-item"
+            onClick={() => window.location.href = '/disease-checkup'}
+          >
+            <Activity size={18} />
+            <span>Image Disease Checkup</span>
           </button>
           <button
             className="nav-item"

@@ -7,6 +7,7 @@ import Analytics from './pages/Analytics';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Questionnaire from './pages/Questionnaire';
+import DiseaseCheckup from './pages/DiseaseCheckup';
 import './App.css';
 
 // Protected Route Component
@@ -71,6 +72,11 @@ function AppRoutes() {
       <Route path="/analytics" element={
         <ProtectedRoute>
           <Analytics />
+        </ProtectedRoute>
+      } />
+      <Route path="/disease-checkup" element={
+        <ProtectedRoute>
+          <DiseaseCheckup />
         </ProtectedRoute>
       } />
       

@@ -119,6 +119,19 @@ class ApiService {
     return response.data;
   }
 
+  async predictDiseaseImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const response = await api.post('/disease/predict', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return response.data;
+  }
+
   // Weather endpoints (if you add them later)
   async getWeatherData(location) {
     const response = await api.get(`/weather?location=${encodeURIComponent(location)}`);
