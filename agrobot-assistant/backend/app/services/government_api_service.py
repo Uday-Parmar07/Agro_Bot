@@ -124,23 +124,27 @@ def generate_government_schemes(user_data: Dict[str, Any]) -> Dict[str, Any]:
 	schemes_text, sources = _search_government_schemes(location, crop_focus)
 	prompt = _build_prompt(user_data, schemes_text)
 
-	completion = groq_client.chat.completions.create(
-		model="llama-3.1-8b-instant",
-		messages=[{"role": "user", "content": prompt}],
-		temperature=0.2,
-		max_tokens=900,
-	)
+	try:
+		completion = groq_client.chat.completions.create(
+			model="llama-3.1-8b-instant",
+			messages=[{"role": "user", "content": prompt}],
+			temperature=0.2,
+			max_tokens=900,
+		)
 
-	raw_response = completion.choices[0].message.content
-	parsed = _parse_llm_response(raw_response)
-	summary = _clean_summary(parsed.get("summary", ""))
-	schemes = _normalize_schemes(parsed.get("schemes", []))
+		raw_response = completion.choices[0].message.content
+		parsed = _parse_llm_response(raw_response)
+		summary = _clean_summary(parsed.get("summary", ""))
+		schemes = _normalize_schemes(parsed.get("schemes", []))
 
-	return {
-		"summary": summary,
-		"schemes": schemes,
-		"sources": sources,
-	}
+		return {
+			"summary": summary,
+			"schemes": schemes,
+			"sources": sources,
+			"llm_enhanced": True,
+		}
+	except Exception:
+		return _fallback_from_sources(location=location, sources=sources)
 
 
 def _parse_llm_response(raw_text: str) -> Dict[str, Any]:
@@ -213,6 +217,43 @@ def _clean_summary(text: str) -> str:
 	text = re.sub(r"^\s*\d+\.\s*", "• ", text, flags=re.MULTILINE)  # numbered lists to bullets
 	text = re.sub(r"^\s*[-–]\s*", "• ", text, flags=re.MULTILINE)  # dash bullets to bullets
 	return text.strip()
+
+
+def _fallback_from_sources(location: str, sources: List[Dict[str, str]]) -> Dict[str, Any]:
+	"""Fallback response when LLM enrichment is unavailable."""
+	schemes: List[Dict[str, str]] = []
+	for src in sources[:5]:
+		title = (src.get("title") or "Government Scheme").strip()
+		url = (src.get("url") or "").strip()
+		domain = (src.get("domain") or "Official government source").strip()
+		schemes.append(
+			{
+				"name": title,
+				"brief_description": f"Relevant scheme information sourced from {domain}.",
+				"eligibility": "Check official notification for eligibility details.",
+				"how_to_apply": url or "Visit the official department portal listed in sources.",
+			}
+		)
+
+	if not schemes:
+		schemes = [
+			{
+				"name": "No schemes extracted",
+				"brief_description": "Could not extract schemes from official sources at this time.",
+				"eligibility": "Not specified in source data",
+				"how_to_apply": "Try again later or check state agriculture department portals.",
+			}
+		]
+
+	return {
+		"summary": (
+			f"Showing official-source scheme links for {location}. AI enrichment is temporarily unavailable, "
+			"but you can still review and apply via the listed portals."
+		),
+		"schemes": schemes,
+		"sources": sources,
+		"llm_enhanced": False,
+	}
 
 
 if __name__ == "__main__":
