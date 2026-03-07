@@ -137,6 +137,11 @@ class ApiService {
     const response = await api.get(`/weather?location=${encodeURIComponent(location)}`);
     return response.data;
   }
+
+  async getWeatherOverview() {
+    const response = await api.get('/weather/overview');
+    return response.data;
+  }
 }
 
 export default new ApiService();

@@ -126,7 +126,7 @@ def generate_government_schemes(user_data: Dict[str, Any]) -> Dict[str, Any]:
 
 	try:
 		completion = groq_client.chat.completions.create(
-			model="llama-3.1-8b-instant",
+			model="llama-3.3-70b-versatile",
 			messages=[{"role": "user", "content": prompt}],
 			temperature=0.2,
 			max_tokens=900,

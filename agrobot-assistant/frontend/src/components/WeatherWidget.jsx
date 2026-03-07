@@ -1,24 +1,67 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Cloud, Sun, CloudRain, Wind, Eye, Gauge, Droplets, MapPin } from 'lucide-react';
+import ApiService from '../services/api';
 import './WeatherWidget.css';
 
 const WeatherWidget = () => {
-  const [weather] = useState({
+  const [weather, setWeather] = useState({
     current: {
-      temperature: 24,
-      condition: 'Partly Cloudy',
-      humidity: 68,
-      windSpeed: 12,
-      visibility: 10,
-      pressure: 1013,
-      location: 'Farm Location'
+      temperature: 0,
+      condition: 'Loading',
+      humidity: 0,
+      windSpeed: 0,
+      visibility: 0,
+      pressure: 0,
+      location: 'Loading location...'
     },
-    forecast: [
-      { day: 'Today', high: 26, low: 18, condition: 'Sunny', icon: '☀️' },
-      { day: 'Tomorrow', high: 24, low: 16, condition: 'Cloudy', icon: '☁️' },
-      { day: 'Wed', high: 22, low: 14, condition: 'Rainy', icon: '🌧️' }
-    ]
+    forecast: []
   });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadWeather = async () => {
+      try {
+        setLoading(true);
+        const data = await ApiService.getWeatherOverview();
+
+        const current = data.current || {};
+        const forecast = (data.forecast || []).slice(0, 3).map((entry, index) => {
+          const dateObj = entry.date ? new Date(entry.date) : null;
+          const day = index === 0
+            ? 'Today'
+            : (dateObj ? dateObj.toLocaleDateString('en-US', { weekday: 'short' }) : `Day ${index + 1}`);
+          const condition = entry.description || 'Cloudy';
+
+          return {
+            day,
+            high: Math.round(entry.temperature ?? 0),
+            low: Math.max(Math.round((entry.temperature ?? 0) - 3), 0),
+            condition,
+            icon: condition.toLowerCase().includes('rain') ? '🌧️' : condition.toLowerCase().includes('cloud') ? '☁️' : '☀️'
+          };
+        });
+
+        setWeather({
+          current: {
+            temperature: Math.round(current.temperature ?? 0),
+            condition: current.description || 'Cloudy',
+            humidity: current.humidity ?? 0,
+            windSpeed: current.wind_speed ?? 0,
+            visibility: current.visibility ?? 0,
+            pressure: current.pressure ?? 0,
+            location: data.location || current.location || 'Farm Location'
+          },
+          forecast
+        });
+      } catch (error) {
+        console.error('Weather load failed:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadWeather();
+  }, []);
 
   const getWeatherIcon = (condition) => {
     switch (condition.toLowerCase()) {
@@ -53,7 +96,7 @@ const WeatherWidget = () => {
           </div>
         </div>
         <div className="condition-info">
-          <span className="condition-text">{weather.current.condition}</span>
+          <span className="condition-text">{loading ? 'Loading...' : weather.current.condition}</span>
         </div>
       </div>
 

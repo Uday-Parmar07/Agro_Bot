@@ -1,65 +1,53 @@
 from typing import Dict, Any
+import json
+
 
 def generate_farming_prompt(user_data: Dict[str, Any]) -> str:
-    """
-    Generate a comprehensive prompt for the AI model based on user questionnaire data
-    """
-    
-    # Extract data from different questionnaire sets
-    soil_physical = user_data.get("set_1", {})
-    soil_fertility = user_data.get("set_2", {})
-    moisture_irrigation = user_data.get("set_3", {})
-    environmental = user_data.get("set_4", {})
-    organic_practices = user_data.get("set_5", {})
-    
-    prompt = f"""
-    I am a farmer seeking agricultural advice. Here are the details about my farm:
+   """Generate a compact profile prompt from questionnaire data."""
 
-    🧪 SOIL PHYSICAL PROPERTIES:
-    - Soil Texture: {soil_physical.get('soil_texture', 'Not specified')}
-    - Water Retention: {soil_physical.get('water_retention', 'Not specified')}
-    - Top Layer Condition: {soil_physical.get('soil_top_layer', 'Not specified')}
+   soil_physical = user_data.get("set_1", {})
+   soil_fertility = user_data.get("set_2", {})
+   moisture_irrigation = user_data.get("set_3", {})
+   environmental = user_data.get("set_4", {})
+   organic_practices = user_data.get("set_5", {})
 
-    🌱 SOIL FERTILITY & NUTRIENTS:
-    - Soil Test Done: {soil_fertility.get('soil_test_done', 'No')}
-    - NPK Levels: N-{soil_fertility.get('npk_nitrogen', 'Unknown')}, P-{soil_fertility.get('npk_phosphorus', 'Unknown')}, K-{soil_fertility.get('npk_potassium', 'Unknown')}
-    - Yellowing/Slow Growth Observed: {soil_fertility.get('yellowing_slow_growth', 'No')}
-    - Current Fertilizer Type: {soil_fertility.get('fertilizer_type', 'Not specified')}
+   profile = {
+      "soil_physical": {
+         "soil_texture": soil_physical.get("soil_texture", "Not specified"),
+         "water_retention": soil_physical.get("water_retention", "Not specified"),
+         "soil_top_layer": soil_physical.get("soil_top_layer", "Not specified"),
+      },
+      "soil_fertility": {
+         "soil_test_done": soil_fertility.get("soil_test_done", "No"),
+         "npk_nitrogen": soil_fertility.get("npk_nitrogen", "Unknown"),
+         "npk_phosphorus": soil_fertility.get("npk_phosphorus", "Unknown"),
+         "npk_potassium": soil_fertility.get("npk_potassium", "Unknown"),
+         "yellowing_slow_growth": soil_fertility.get("yellowing_slow_growth", "No"),
+         "fertilizer_type": soil_fertility.get("fertilizer_type", "Not specified"),
+      },
+      "moisture_irrigation": {
+         "irrigation_type": moisture_irrigation.get("irrigation_type", "Not specified"),
+         "watering_frequency": moisture_irrigation.get("watering_frequency", "Not specified"),
+      },
+      "environmental": {
+         "district": environmental.get("district", "Not specified"),
+         "state": environmental.get("state", "Not specified"),
+         "average_rainfall": environmental.get("average_rainfall", "Not specified"),
+         "average_temperature": environmental.get("average_temperature", "Not specified"),
+         "total_area": environmental.get("total_area", "Not specified"),
+         "area_unit": environmental.get("area_unit", ""),
+      },
+      "organic_practices": {
+         "uses_organic_matter": organic_practices.get("uses_organic_matter", "No"),
+         "organic_matter_types": organic_practices.get("organic_matter_types", []),
+         "crop_residue_practice": organic_practices.get("crop_residue_practice", "Not specified"),
+         "earthworms_present": organic_practices.get("earthworms_present", "No"),
+      },
+   }
 
-    💧 MOISTURE & IRRIGATION:
-    - Irrigation Method: {moisture_irrigation.get('irrigation_type', 'Not specified')}
-    - Watering Frequency: {moisture_irrigation.get('watering_frequency', 'Not specified')}
+   prompt = (
+      "Farm profile JSON (use this data only, do not repeat/copy the text; infer recommendations):\n"
+      + json.dumps(profile, ensure_ascii=False)
+   )
 
-    🌍 ENVIRONMENTAL & REGIONAL:
-    - Location: {environmental.get('district', 'Not specified')}, {environmental.get('state', 'Not specified')}
-    - Average Rainfall: {environmental.get('average_rainfall', 'Not specified')} mm/year
-    - Average Temperature: {environmental.get('average_temperature', 'Not specified')}°C
-    - Total Farm Area: {environmental.get('total_area', 'Not specified')} {environmental.get('area_unit', '')}
-
-    🌿 ORGANIC MATTER & PRACTICES:
-    - Uses Organic Matter: {organic_practices.get('uses_organic_matter', 'No')}
-    - Organic Matter Types: {', '.join(organic_practices.get('organic_matter_types', []))}
-    - Crop Residue Practice: {organic_practices.get('crop_residue_practice', 'Not specified')}
-    - Earthworms Present: {organic_practices.get('earthworms_present', 'No')}
-
-    Based on this information, please provide:
-
-    1. A soil health assessment score (0-10)
-    2. Top 3 recommended crops suitable for my conditions with varieties, expected yield, and market prices
-    3. A detailed farming calendar for the next 6 months with specific dates for:
-       - Land preparation
-       - Sowing/planting
-       - Fertilizer application
-       - Irrigation schedule
-       - Pest control measures
-       - Harvesting
-    4. Specific soil improvement recommendations
-    5. Irrigation optimization suggestions
-    6. Fertilizer recommendations based on my soil condition
-    7. Pest and disease prevention strategies
-
-    Please consider the local climate, soil conditions, and current farming practices in your recommendations.
-    Focus on sustainable and profitable farming methods suitable for Indian agriculture.
-    """
-    
-    return prompt.strip()
+   return prompt.strip()

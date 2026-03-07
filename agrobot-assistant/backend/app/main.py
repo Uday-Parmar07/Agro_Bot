@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, questionnaire, recommendations, disease
+from app.routers import auth, questionnaire, recommendations, disease, weather
 from app.database.connection import create_tables
 
 app = FastAPI(
@@ -28,6 +28,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(questionnaire.router, prefix="/api/questionnaire", tags=["Questionnaire"])
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["AI Recommendations"])
 app.include_router(disease.router, prefix="/api/disease", tags=["Disease Checkup"])
+app.include_router(weather.router, prefix="/api/weather", tags=["Weather"])
 
 @app.on_event("startup")
 async def startup_event():
