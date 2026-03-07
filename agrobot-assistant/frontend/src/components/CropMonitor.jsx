@@ -2,7 +2,7 @@ import React from 'react';
 import { Leaf, Plus, AlertCircle, CheckCircle, Droplets, Thermometer } from 'lucide-react';
 import './CropMonitor.css';
 
-const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations }) => {
+const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, showAddButton = true }) => {
   
   if (!crops || crops.length === 0) {
     return (
@@ -18,14 +18,16 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations }) =
           <div className="empty-content">
             <Leaf size={64} className="empty-icon" />
             <h3>No Crops Added Yet</h3>
-            <p>Start by adding your first crop to monitor its health and get AI recommendations</p>
-            <button 
-              className="add-first-crop-btn"
-              onClick={onAddCrop}
-            >
-              <Plus size={20} />
-              Add Your First Crop
-            </button>
+            <p>Add your first crop to get disease detection, irrigation alerts, fertilizer recommendations, and yield guidance.</p>
+            {showAddButton && (
+              <button 
+                className="add-first-crop-btn"
+                onClick={onAddCrop}
+              >
+                <Plus size={20} />
+                Add Your First Crop
+              </button>
+            )}
           </div>
           
           {recommendations && recommendations.recommended_crops && (
@@ -74,12 +76,14 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations }) =
           <h2>Crop Health Monitor</h2>
           <p>Real-time monitoring of {crops.length} crop{crops.length !== 1 ? 's' : ''}</p>
         </div>
-        <div className="header-right">
-          <button className="add-crop-btn" onClick={onAddCrop}>
-            <Plus size={16} />
-            Add Crop
-          </button>
-        </div>
+        {showAddButton && (
+          <div className="header-right">
+            <button className="add-crop-btn" onClick={onAddCrop}>
+              <Plus size={16} />
+              Add Crop
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="crops-grid">

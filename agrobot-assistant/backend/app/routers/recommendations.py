@@ -17,6 +17,76 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _serialize_recommendation_payload(recommendations: AIRecommendationResponse):
+    farming_calendar_serializable = []
+    for event in recommendations.farming_calendar:
+        event_dict = event.dict()
+        if isinstance(event_dict['date'], date):
+            event_dict['date'] = event_dict['date'].isoformat()
+        farming_calendar_serializable.append(event_dict)
+
+    recommended_crops_serializable = []
+    for crop in recommendations.recommended_crops:
+        recommended_crops_serializable.append(crop.dict())
+
+    return recommended_crops_serializable, farming_calendar_serializable
+
+
+def _save_recommendation(db: Session, user_id: int, recommendations: AIRecommendationResponse) -> Recommendation:
+    recommended_crops_serializable, farming_calendar_serializable = _serialize_recommendation_payload(recommendations)
+
+    db_recommendation = Recommendation(
+        user_id=user_id,
+        soil_health_score=recommendations.soil_health_score,
+        recommended_crops=recommended_crops_serializable,
+        farming_calendar=farming_calendar_serializable,
+        soil_improvement_tips=recommendations.soil_improvement_tips,
+        irrigation_recommendations=recommendations.irrigation_recommendations,
+        fertilizer_recommendations=recommendations.fertilizer_recommendations,
+        pest_disease_prevention=recommendations.pest_disease_prevention,
+        next_review_date=recommendations.next_review_date.isoformat() if recommendations.next_review_date else None
+    )
+
+    db.add(db_recommendation)
+    db.commit()
+    db.refresh(db_recommendation)
+    return db_recommendation
+
+
+def _db_to_response_model(latest_recommendation: Recommendation) -> AIRecommendationResponse:
+    farming_calendar = []
+    for event in latest_recommendation.farming_calendar:
+        event_copy = event.copy()
+        if isinstance(event_copy['date'], str):
+            try:
+                event_copy['date'] = datetime.strptime(event_copy['date'], '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        farming_calendar.append(CalendarEvent(**event_copy))
+
+    next_review_date = None
+    if latest_recommendation.next_review_date:
+        try:
+            next_review_date = datetime.strptime(latest_recommendation.next_review_date, '%Y-%m-%d').date()
+        except ValueError:
+            next_review_date = None
+
+    return AIRecommendationResponse(
+        user_id=latest_recommendation.user_id,
+        soil_health_score=latest_recommendation.soil_health_score,
+        recommended_crops=[
+            CropRecommendation(**crop) for crop in latest_recommendation.recommended_crops
+        ],
+        farming_calendar=farming_calendar,
+        soil_improvement_tips=latest_recommendation.soil_improvement_tips,
+        irrigation_recommendations=latest_recommendation.irrigation_recommendations,
+        fertilizer_recommendations=latest_recommendation.fertilizer_recommendations,
+        pest_disease_prevention=latest_recommendation.pest_disease_prevention,
+        generated_at=latest_recommendation.generated_at,
+        next_review_date=next_review_date
+    )
+
+
 def _build_user_profile_from_responses(responses):
     """Flatten questionnaire sets into a profile for scheme generation."""
     sets = {resp.set_number: resp.answers for resp in responses}
@@ -89,42 +159,9 @@ async def generate_recommendations(
         # Save recommendations to database
         logger.info("💾 Saving recommendations to database...")
         try:
-            # Convert date objects to strings for JSON serialization
-            farming_calendar_serializable = []
-            for event in recommendations.farming_calendar:
-                event_dict = event.dict()
-                # Convert date to string
-                if isinstance(event_dict['date'], date):
-                    event_dict['date'] = event_dict['date'].isoformat()
-                farming_calendar_serializable.append(event_dict)
-            
-            recommended_crops_serializable = []
-            for crop in recommendations.recommended_crops:
-                crop_dict = crop.dict()
-                recommended_crops_serializable.append(crop_dict)
-            
-            db_recommendation = Recommendation(
-                user_id=current_user.id,
-                soil_health_score=recommendations.soil_health_score,
-                recommended_crops=recommended_crops_serializable,
-                farming_calendar=farming_calendar_serializable,
-                soil_improvement_tips=recommendations.soil_improvement_tips,
-                irrigation_recommendations=recommendations.irrigation_recommendations,
-                fertilizer_recommendations=recommendations.fertilizer_recommendations,
-                pest_disease_prevention=recommendations.pest_disease_prevention,
-                next_review_date=recommendations.next_review_date.isoformat() if recommendations.next_review_date else None
-            )
-            
-            logger.info("📝 Created recommendation object")
-            db.add(db_recommendation)
-            logger.info("➕ Added to database session")
-            
-            db.commit()
-            logger.info("💾 Committed to database")
-            
-            db.refresh(db_recommendation)
-            logger.info(f"🔄 Refreshed - DB ID: {db_recommendation.id}")
-            
+            db_recommendation = _save_recommendation(db, current_user.id, recommendations)
+            logger.info(f"🔄 Saved recommendation - DB ID: {db_recommendation.id}")
+
         except Exception as db_error:
             logger.error(f"❌ Database save error: {type(db_error).__name__}: {db_error}")
             logger.error(f"🔍 DB Error traceback: {traceback.format_exc()}")
@@ -160,6 +197,26 @@ async def get_latest_recommendations(
     latest_recommendation = db.query(Recommendation).filter(
         Recommendation.user_id == current_user.id
     ).order_by(Recommendation.generated_at.desc()).first()
+
+    responses = db.query(QuestionnaireResponse).filter(
+        QuestionnaireResponse.user_id == current_user.id
+    ).all()
+
+    latest_questionnaire_update = max((resp.updated_at for resp in responses), default=None)
+
+    if latest_recommendation and latest_questionnaire_update and latest_recommendation.generated_at < latest_questionnaire_update:
+        logger.info("🔄 Recommendation is stale for user %s. Regenerating from latest questionnaire data.", current_user.id)
+        try:
+            user_data = {"user_id": current_user.id}
+            for response in responses:
+                user_data[f"set_{response.set_number}"] = response.answers
+
+            regenerated = await ai_service.generate_farming_recommendations(user_data)
+            latest_recommendation = _save_recommendation(db, current_user.id, regenerated)
+            logger.info("✅ Regenerated recommendation ID %s", latest_recommendation.id)
+        except Exception as e:
+            logger.error("❌ Failed to regenerate stale recommendation: %s", e)
+            logger.error(traceback.format_exc())
     
     if not latest_recommendation:
         logger.warning(f"❌ No recommendations found for user {current_user.id}")
@@ -170,48 +227,11 @@ async def get_latest_recommendations(
     
     logger.info(f"✅ Found recommendation ID {latest_recommendation.id}")
     
-    # Convert database model to response model
     try:
-        # Convert date strings back to date objects for farming calendar
-        farming_calendar = []
-        for event in latest_recommendation.farming_calendar:
-            event_copy = event.copy()
-            # Convert string date back to date object
-            if isinstance(event_copy['date'], str):
-                try:
-                    event_copy['date'] = datetime.strptime(event_copy['date'], '%Y-%m-%d').date()
-                except ValueError:
-                    # If date parsing fails, keep as string
-                    pass
-            farming_calendar.append(CalendarEvent(**event_copy))
-        
-        # Handle next_review_date conversion
-        next_review_date = None
-        if latest_recommendation.next_review_date:
-            try:
-                next_review_date = datetime.strptime(latest_recommendation.next_review_date, '%Y-%m-%d').date()
-            except ValueError:
-                # If parsing fails, set to None
-                next_review_date = None
-        
-        recommendations = AIRecommendationResponse(
-            user_id=latest_recommendation.user_id,
-            soil_health_score=latest_recommendation.soil_health_score,
-            recommended_crops=[
-                CropRecommendation(**crop) for crop in latest_recommendation.recommended_crops
-            ],
-            farming_calendar=farming_calendar,
-            soil_improvement_tips=latest_recommendation.soil_improvement_tips,
-            irrigation_recommendations=latest_recommendation.irrigation_recommendations,
-            fertilizer_recommendations=latest_recommendation.fertilizer_recommendations,
-            pest_disease_prevention=latest_recommendation.pest_disease_prevention,
-            generated_at=latest_recommendation.generated_at,
-            next_review_date=next_review_date
-        )
-        
+        recommendations = _db_to_response_model(latest_recommendation)
         logger.info("✅ Successfully converted DB model to response")
         return recommendations
-        
+
     except Exception as e:
         logger.error(f"❌ Error converting DB model: {type(e).__name__}: {e}")
         logger.error(f"🔍 Conversion traceback: {traceback.format_exc()}")

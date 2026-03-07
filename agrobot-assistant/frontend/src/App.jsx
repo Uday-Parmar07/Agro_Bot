@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Questionnaire from './pages/Questionnaire';
 import DiseaseCheckup from './pages/DiseaseCheckup';
+import GovernmentSchemes from './pages/GovernmentSchemes';
 import './App.css';
 
 // Protected Route Component
@@ -77,6 +78,11 @@ function AppRoutes() {
       <Route path="/disease-checkup" element={
         <ProtectedRoute>
           <DiseaseCheckup />
+        </ProtectedRoute>
+      } />
+      <Route path="/government-schemes" element={
+        <ProtectedRoute>
+          <GovernmentSchemes />
         </ProtectedRoute>
       } />
       
