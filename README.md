@@ -57,6 +57,19 @@ Agrobot is an AI-powered agricultural assistant platform designed to empower far
 - `/api/questionnaire`: Submit and complete questionnaire data
 - `/api/recommendations`: Generate and fetch AI recommendations
 
+## Recent Updates
+
+The following additions and changes are currently included in the project:
+
+- Added modular backend routing for `auth`, `disease`, `questionnaire`, `recommendations`, and `weather` flows.
+- Added service layer components for AI inference, disease inference, weather integration, and government API integration.
+- Added structured database and model organization under `app/database` and `app/models`.
+- Added utility helpers for authentication and prompt generation.
+- Added `ml-cnn` pipeline with training, evaluation, prediction, dataset utilities, and model artifacts support.
+- Added frontend dashboard experience with auth context, analytics/auth pages, weather widget, crop monitoring, and crop onboarding modal.
+- Added API integration layer in frontend under `src/services/api.js`.
+- Added backend test/utility scripts such as `test_api.py`, `test_tavily.py`, `debug_db.py`, and dataset split tooling.
+
 ## Contributing
 
 Contributions are welcome! Please fork the repository and submit pull requests for improvements or bug fixes.
