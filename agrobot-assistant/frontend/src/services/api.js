@@ -5,9 +5,6 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
 // Add auth token to requests
@@ -48,12 +45,9 @@ class ApiService {
     const formData = new FormData();
     formData.append('username', credentials.email);
     formData.append('password', credentials.password);
-    
-    const response = await api.post('/auth/login', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+
+    // Let the browser set multipart boundary automatically.
+    const response = await api.post('/auth/login', formData);
     return response.data;
   }
 
@@ -123,11 +117,7 @@ class ApiService {
     const formData = new FormData();
     formData.append('image', file);
 
-    const response = await api.post('/disease/predict', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const response = await api.post('/disease/predict', formData);
 
     return response.data;
   }
