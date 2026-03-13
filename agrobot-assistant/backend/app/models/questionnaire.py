@@ -43,6 +43,7 @@ class SoilFertilityNutrients(BaseModel):
     npk_nitrogen: Optional[float] = None
     npk_phosphorus: Optional[float] = None
     npk_potassium: Optional[float] = None
+    soil_ph: Optional[float] = None
     yellowing_slow_growth: bool
     fertilizer_type: str  # "organic", "chemical", "both", "none"
 

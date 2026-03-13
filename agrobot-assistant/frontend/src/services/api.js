@@ -5,6 +5,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 30000,
 });
 
 // Add auth token to requests
@@ -42,12 +43,13 @@ class ApiService {
   }
 
   async login(credentials) {
-    const formData = new FormData();
-    formData.append('username', credentials.email);
-    formData.append('password', credentials.password);
+    const params = new URLSearchParams();
+    params.append('username', credentials.email);
+    params.append('password', credentials.password);
 
-    // Let the browser set multipart boundary automatically.
-    const response = await api.post('/auth/login', formData);
+    const response = await api.post('/auth/login', params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
     return response.data;
   }
 

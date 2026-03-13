@@ -22,16 +22,31 @@ export const AuthProvider = ({ children }) => {
       const savedUser = localStorage.getItem('user');
 
       if (token && savedUser) {
+        // Use cached user immediately — no spinner, no blocking network call
         try {
-          const userData = await ApiService.getCurrentUser();
-          setUser(userData);
+          const parsed = JSON.parse(savedUser);
+          setUser(parsed);
           setIsAuthenticated(true);
-        } catch (error) {
+        } catch {
           localStorage.removeItem('access_token');
           localStorage.removeItem('user');
         }
+        setLoading(false);
+
+        // Validate token in the background; update or logout silently
+        try {
+          const userData = await ApiService.getCurrentUser();
+          setUser(userData);
+          localStorage.setItem('user', JSON.stringify(userData));
+        } catch {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('user');
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+      } else {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     initializeAuth();

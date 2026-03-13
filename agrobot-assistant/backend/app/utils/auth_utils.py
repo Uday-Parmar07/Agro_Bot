@@ -1,3 +1,4 @@
+import asyncio
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from fastapi import HTTPException, status, Depends
@@ -8,8 +9,8 @@ from app.database.connection import get_db
 from app.database.schemas import User
 import os
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password hashing — use lower rounds for faster hashing (default 12 is slow)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=10)
 
 # JWT settings
 SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
@@ -24,10 +25,18 @@ def hash_password(password: str) -> str:
     safe_password = password[:72]
     return pwd_context.hash(safe_password)
 
+async def hash_password_async(password: str) -> str:
+    """Hash a password without blocking the event loop."""
+    return await asyncio.to_thread(hash_password, password)
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
     safe_password = plain_password[:72]
     return pwd_context.verify(safe_password, hashed_password)
+
+async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password without blocking the event loop."""
+    return await asyncio.to_thread(verify_password, plain_password, hashed_password)
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     """Create JWT access token"""

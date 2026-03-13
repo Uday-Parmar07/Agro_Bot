@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.models.user import UserCreate, UserLogin, UserResponse, Token
 from app.database.connection import get_db
-from app.utils.auth_utils import create_access_token, verify_password, hash_password, get_current_user
+from app.utils.auth_utils import create_access_token, verify_password_async, hash_password_async, get_current_user
 from app.database.schemas import User
 from datetime import timedelta
 
@@ -21,7 +21,7 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
         )
     
     # Create new user
-    hashed_password = hash_password(user_data.password)
+    hashed_password = await hash_password_async(user_data.password)
     new_user = User(
         email=user_data.email,
         hashed_password=hashed_password,
@@ -53,7 +53,7 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username).first()
     
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    if not user or not await verify_password_async(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

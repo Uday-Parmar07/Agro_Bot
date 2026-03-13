@@ -102,6 +102,13 @@ const Questionnaire = () => {
           placeholder: 'Enter potassium level (kg/ha)'
         },
         {
+          id: 'soil_ph',
+          question: 'Soil pH level:',
+          type: 'number',
+          conditional: 'soil_test_done',
+          placeholder: 'Enter soil pH (e.g., 6.5)'
+        },
+        {
           id: 'yellowing_slow_growth',
           question: 'Have you noticed yellowing or slow growth in crops recently?',
           type: 'radio',

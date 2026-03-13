@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from groq import Groq
 from app.models.recommendation import AIRecommendationResponse, CropRecommendation, CalendarEvent
 from app.utils.prompt_generator import generate_farming_prompt
+from app.services.crop_prediction_service import crop_prediction_service
 from typing import Dict, Any
 import json
 import re
@@ -20,8 +21,21 @@ class AIService:
             logger.warning("GROQ_API_KEY is not set; using fallback recommendation mode.")
         
     async def generate_farming_recommendations(self, user_data: Dict[str, Any]) -> AIRecommendationResponse:
-        # Generate comprehensive prompt from user questionnaire data
-        prompt = generate_farming_prompt(user_data)
+        # Step 1: Get XGBoost crop predictions (non-blocking on failure)
+        xgb_predictions = []
+        try:
+            xgb_predictions = await crop_prediction_service.predict_crops(user_data, top_n=5)
+            if xgb_predictions:
+                logger.info("XGBoost returned %d predictions: %s",
+                            len(xgb_predictions),
+                            [p["crop_name"] for p in xgb_predictions])
+            else:
+                logger.info("XGBoost returned no predictions; proceeding with LLM-only mode")
+        except Exception as e:
+            logger.warning("XGBoost prediction failed, falling back to LLM-only: %s", e)
+
+        # Step 2: Generate prompt (includes XGBoost predictions when available)
+        prompt = generate_farming_prompt(user_data, xgb_predictions=xgb_predictions or None)
 
         if self.client is None:
             return self._generate_fallback_response(user_data)

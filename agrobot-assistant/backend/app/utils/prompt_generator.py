@@ -1,9 +1,14 @@
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 import json
 
 
-def generate_farming_prompt(user_data: Dict[str, Any]) -> str:
-   """Generate a compact profile prompt from questionnaire data."""
+def generate_farming_prompt(user_data: Dict[str, Any],
+                            xgb_predictions: Optional[List[Dict[str, Any]]] = None) -> str:
+   """Generate a compact profile prompt from questionnaire data.
+
+   When *xgb_predictions* is provided the prompt instructs the LLM to
+   prioritise those crops and enrich them with variety / calendar / tips.
+   """
 
    soil_physical = user_data.get("set_1", {})
    soil_fertility = user_data.get("set_2", {})
@@ -22,6 +27,7 @@ def generate_farming_prompt(user_data: Dict[str, Any]) -> str:
          "npk_nitrogen": soil_fertility.get("npk_nitrogen", "Unknown"),
          "npk_phosphorus": soil_fertility.get("npk_phosphorus", "Unknown"),
          "npk_potassium": soil_fertility.get("npk_potassium", "Unknown"),
+         "soil_ph": soil_fertility.get("soil_ph", "Unknown"),
          "yellowing_slow_growth": soil_fertility.get("yellowing_slow_growth", "No"),
          "fertilizer_type": soil_fertility.get("fertilizer_type", "Not specified"),
       },
@@ -45,9 +51,24 @@ def generate_farming_prompt(user_data: Dict[str, Any]) -> str:
       },
    }
 
-   prompt = (
-      "Farm profile JSON (use this data only, do not repeat/copy the text; infer recommendations):\n"
-      + json.dumps(profile, ensure_ascii=False)
-   )
+   if xgb_predictions:
+      profile["ml_crop_predictions"] = [
+         {"crop": p["crop_name"], "confidence": p["confidence"]}
+         for p in xgb_predictions
+      ]
 
+   if xgb_predictions:
+      preamble = (
+         "Farm profile JSON (use this data only; do not repeat/copy the text; infer recommendations).\n"
+         "IMPORTANT: The ml_crop_predictions field contains machine-learning-predicted crops with "
+         "confidence scores. Prioritize these crops in your recommended_crops list. "
+         "For each, provide variety, sowing_season, expected_yield, market_price_range, "
+         "and profitability_score. You may add 1-2 additional suitable crops if appropriate.\n"
+      )
+   else:
+      preamble = (
+         "Farm profile JSON (use this data only, do not repeat/copy the text; infer recommendations):\n"
+      )
+
+   prompt = preamble + json.dumps(profile, ensure_ascii=False)
    return prompt.strip()
