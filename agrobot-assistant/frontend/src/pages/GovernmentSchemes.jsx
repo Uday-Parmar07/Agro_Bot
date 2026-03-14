@@ -145,26 +145,28 @@ const GovernmentSchemes = () => {
     return match || 'India';
   };
 
-  const calculateEstimatedBenefit = (subsidy) => {
-    if (typeof subsidy !== 'number') return 15000;
-    return Math.max(12000, Math.round((subsidy / 100) * 60000));
-  };
-
   const normalizeScheme = (scheme, index, sourceUrl) => {
     const subsidy = parseSubsidy(scheme);
     const category = inferCategory(scheme);
     const difficulty = inferDifficulty(scheme);
     const state = inferStateFromText(scheme);
+
+    // Use apply_url from backend (LLM-extracted or source fallback)
+    const applyUrl = scheme.apply_url && scheme.apply_url.startsWith('http')
+      ? scheme.apply_url
+      : sourceUrl || '';
+
     return {
       id: `${index}-${scheme.name}`,
       name: scheme.name,
       shortDescription: scheme.brief_description || 'Official scheme support for eligible farmers.',
       eligibility: scheme.eligibility || 'Please check official criteria before applying.',
       applyInfo: scheme.how_to_apply || sourceUrl || 'Visit official portal to apply.',
+      applyUrl,
       subsidy,
       subsidyBand: subsidyBand(subsidy),
       category,
-      estimatedBenefit: calculateEstimatedBenefit(subsidy),
+      estimatedBenefit: scheme.estimated_benefit || 'Refer to official source',
       documentsRequired: inferDocuments(scheme),
       difficulty,
       approvalTime: inferApprovalTime(difficulty),
@@ -270,6 +272,7 @@ const GovernmentSchemes = () => {
   };
 
   const getApplyLink = (scheme) => {
+    if (scheme.applyUrl) return scheme.applyUrl;
     if (/https?:\/\//i.test(scheme.applyInfo)) return scheme.applyInfo;
     if (scheme.sourceUrl) return scheme.sourceUrl;
     return 'https://www.myscheme.gov.in/';
@@ -297,7 +300,7 @@ const GovernmentSchemes = () => {
 
         <div className="scheme-estimate">
           <span>{t.labels.estimated}</span>
-          <strong>₹{scheme.estimatedBenefit.toLocaleString('en-IN')}</strong>
+          <strong>{scheme.estimatedBenefit}</strong>
         </div>
 
         <div className="scheme-quick-meta">

@@ -135,7 +135,9 @@ Return ONLY valid JSON with this exact schema:
             "name": "scheme name",
             "brief_description": "specific description based on source snippet",
             "eligibility": "specific eligibility from source; if unavailable, infer cautiously from source context",
-            "how_to_apply": "specific portal/office/application route from source"
+            "how_to_apply": "specific portal/office/application route from source",
+            "estimated_benefit": "monetary amount or subsidy percentage, e.g. '₹6,000 per year', 'up to 50% subsidy on equipment cost', '₹2 lakh loan at 4% interest'",
+            "apply_url": "direct URL to official application portal or scheme page from the source data; must start with http"
         }}
     ]
 }}
@@ -145,6 +147,8 @@ Rules:
 - Do not use markdown.
 - Do not include any text outside JSON.
 - Avoid vague placeholders like "check official notification".
+- estimated_benefit must be a specific number or percentage from the source data; do not guess or use generic amounts.
+- apply_url must be a real URL found in the source data; do not fabricate URLs.
 """
 
 
@@ -273,12 +277,21 @@ def _normalize_schemes(items: List[Dict[str, Any]], sources: List[Dict[str, str]
         if _is_vague_text(how_to_apply):
             how_to_apply = extracted["how_to_apply"]
 
+        estimated_benefit = str(item.get("estimated_benefit", "")).strip()
+        apply_url = str(item.get("apply_url", "")).strip()
+
+        # Fallback: use source URL if LLM didn't provide a valid apply_url
+        if not apply_url.startswith("http"):
+            apply_url = source_url
+
         normalized.append(
             {
                 "name": name,
                 "brief_description": brief or extracted["brief_description"],
                 "eligibility": eligibility or extracted["eligibility"],
                 "how_to_apply": how_to_apply or extracted["how_to_apply"],
+                "estimated_benefit": estimated_benefit or "Refer to official source",
+                "apply_url": apply_url,
             }
         )
 
@@ -362,6 +375,8 @@ def _fallback_from_sources(location: str, sources: List[Dict[str, str]]) -> Dict
                 "brief_description": extracted["brief_description"],
                 "eligibility": extracted["eligibility"],
                 "how_to_apply": extracted["how_to_apply"],
+                "estimated_benefit": "Refer to official source",
+                "apply_url": url,
             }
         )
 
@@ -372,6 +387,8 @@ def _fallback_from_sources(location: str, sources: List[Dict[str, str]]) -> Dict
                 "brief_description": "Could not extract schemes from official sources at this time.",
                 "eligibility": "Data unavailable in fetched source snippets.",
                 "how_to_apply": "Try again later or check state agriculture department portals.",
+                "estimated_benefit": "N/A",
+                "apply_url": "",
             }
         ]
 

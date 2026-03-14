@@ -18,4 +18,10 @@ agrobot.db
 experiments.ipynb
 test_*.py
 debug_db.py
+
+# Training data & scripts — not needed at runtime
 Plant_Disease/
+Dataset/
+ml-cnn/
+train_*.py
+*.ipynb
