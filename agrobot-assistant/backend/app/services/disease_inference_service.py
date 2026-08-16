@@ -190,7 +190,19 @@ class DiseaseInferenceService:
         self._loaded = True
 
     def predict(self, image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
-        self._ensure_loaded()
+        try:
+            self._ensure_loaded()
+        except Exception as exc:
+            logger.warning("Disease model unavailable, returning fallback guidance: %s", exc)
+            fallback = self._fallback_insights("disease_detection_unavailable")
+            return {
+                "predicted_class": "disease_detection_unavailable",
+                "confidence": 0.0,
+                "detailed_classification": fallback["detailed_classification"],
+                "possible_cause": fallback["possible_cause"],
+                "treatment": fallback["treatment"],
+                "llm_enhanced": False,
+            }
 
         transform = self._transforms.Compose(
             [

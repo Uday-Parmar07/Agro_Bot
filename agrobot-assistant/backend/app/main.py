@@ -1,5 +1,7 @@
 import os
+from pathlib import Path
 from fastapi import FastAPI, Depends
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, questionnaire, recommendations, disease, weather
 from app.database.connection import create_tables
@@ -31,13 +33,39 @@ app.include_router(recommendations.router, prefix="/api/recommendations", tags=[
 app.include_router(disease.router, prefix="/api/disease", tags=["Disease Checkup"])
 app.include_router(weather.router, prefix="/api/weather", tags=["Weather"])
 
+BASE_DIR = Path(__file__).resolve().parents[2]
+FRONTEND_BUILD_DIR = BASE_DIR / "frontend" / "build"
+FRONTEND_INDEX = FRONTEND_BUILD_DIR / "index.html"
+
 @app.on_event("startup")
 async def startup_event():
     create_tables()
 
 @app.get("/")
 async def root():
+    if FRONTEND_INDEX.exists():
+        return FileResponse(FRONTEND_INDEX)
     return {"message": "AgroBot API is running!"}
+
+
+@app.get("/{full_path:path}")
+async def serve_frontend(full_path: str):
+
+    if full_path.startswith("api/") or full_path == "api":
+        return {"detail": "Not Found"}
+
+    requested_file = (FRONTEND_BUILD_DIR / full_path).resolve()
+    if FRONTEND_BUILD_DIR.exists() and requested_file.is_file():
+        try:
+            requested_file.relative_to(FRONTEND_BUILD_DIR)
+        except ValueError:
+            return {"detail": "Not Found"}
+        return FileResponse(requested_file)
+
+    if FRONTEND_INDEX.exists():
+        return FileResponse(FRONTEND_INDEX)
+
+    return {"detail": "Frontend build not found"}
 
 if __name__ == "__main__":
     import uvicorn

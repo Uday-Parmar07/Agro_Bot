@@ -1,17 +1,25 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.database.schemas import Base
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 from pathlib import Path
 import os
 
-# Load env files before reading DATABASE_URL
+# Load env files before reading DATABASE_URL.
+# Keep service keys from app/.env, but do not let that file force a remote
+# database URL during local development.
 current_file = Path(__file__).resolve()
 backend_root = current_file.parents[2]  # .../backend
 app_root = current_file.parents[1]      # .../backend/app
 
 load_dotenv(backend_root / ".env")
-load_dotenv(app_root / ".env")
+
+app_env_path = app_root / ".env"
+if app_env_path.exists():
+    app_env = dotenv_values(app_env_path)
+    for key, value in app_env.items():
+        if key != "DATABASE_URL" and value is not None and os.getenv(key) is None:
+            os.environ[key] = value
 
 # Database URL - defaults to SQLite for development
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./agrobot.db')
