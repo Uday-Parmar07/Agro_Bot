@@ -78,11 +78,23 @@ class ApiService {
     return response.data;
   }
 
+  async getFarms() {
+    const response = await api.get('/farms');
+    return response.data;
+  }
+
+  async createFarm(farmData) {
+    const response = await api.post('/farms', farmData);
+    return response.data;
+  }
+
   // Recommendations endpoints
-  async generateRecommendations() {
+  async generateRecommendations(farmId) {
     try {
       console.log('🤖 Calling generate recommendations API...');
-      const response = await api.post('/recommendations/generate');
+      const response = await api.post('/recommendations/generate', null, {
+        params: farmId ? { farm_id: farmId } : {}
+      });
       console.log('✅ Generate recommendations response:', response.data);
       return response.data;
     } catch (error) {
@@ -92,10 +104,12 @@ class ApiService {
     }
   }
 
-  async getLatestRecommendations() {
+  async getLatestRecommendations(farmId) {
     try {
       console.log('📊 Calling get latest recommendations API...');
-      const response = await api.get('/recommendations/latest');
+      const response = await api.get('/recommendations/latest', {
+        params: farmId ? { farm_id: farmId } : {}
+      });
       console.log('✅ Latest recommendations response:', response.data);
       return response.data;
     } catch (error) {
@@ -105,22 +119,57 @@ class ApiService {
     }
   }
 
-  async getRecommendationHistory() {
-    const response = await api.get('/recommendations/history');
+  async getRecommendationHistory(farmId) {
+    const response = await api.get('/recommendations/history', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
     return response.data;
   }
 
-  async getGovernmentSchemes() {
-    const response = await api.get('/recommendations/government-schemes');
+  async getGovernmentSchemes(farmId) {
+    const response = await api.get('/recommendations/government-schemes', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
     return response.data;
   }
 
-  async predictDiseaseImage(file) {
+  async predictDiseaseImage(file, farmId) {
     const formData = new FormData();
     formData.append('image', file);
 
-    const response = await api.post('/disease/predict', formData);
+    const response = await api.post('/disease/predict', formData, {
+      params: farmId ? { farm_id: farmId } : {}
+    });
 
+    return response.data;
+  }
+
+  async getDiseaseHistory(farmId) {
+    const response = await api.get('/disease/history', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
+    return response.data;
+  }
+
+  async getFarmCrops(farmId) {
+    const response = await api.get('/dashboard/crops', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
+    return response.data;
+  }
+
+  async createFarmCrop(cropData) {
+    const response = await api.post('/dashboard/crops', cropData);
+    return response.data;
+  }
+
+  async updateFarmCrop(cropId, cropData) {
+    const response = await api.patch(`/dashboard/crops/${cropId}`, cropData);
+    return response.data;
+  }
+
+  async removeFarmCrop(cropId) {
+    const response = await api.delete(`/dashboard/crops/${cropId}`);
     return response.data;
   }
 
@@ -130,8 +179,17 @@ class ApiService {
     return response.data;
   }
 
-  async getWeatherOverview() {
-    const response = await api.get('/weather/overview');
+  async getWeatherOverview(farmId) {
+    const response = await api.get('/weather/overview', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
+    return response.data;
+  }
+
+  async getAnalyticsOverview(farmId) {
+    const response = await api.get('/analytics/overview', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
     return response.data;
   }
 }

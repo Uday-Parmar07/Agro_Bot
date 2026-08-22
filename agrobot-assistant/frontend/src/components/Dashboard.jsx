@@ -40,6 +40,8 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
 
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [farms, setFarms] = useState([]);
+  const [selectedFarmId, setSelectedFarmId] = useState(null);
   const [recommendations, setRecommendations] = useState(null);
   const [weatherOverview, setWeatherOverview] = useState(null);
   const [questionnaire, setQuestionnaire] = useState({});
@@ -50,21 +52,51 @@ const Dashboard = () => {
   const [assistantOpen, setAssistantOpen] = useState(false);
 
   useEffect(() => {
+    const loadFarms = async () => {
+      try {
+        const farmList = await ApiService.getFarms();
+        setFarms(farmList || []);
+        setSelectedFarmId((farmList || [])[0]?.id || null);
+      } catch (farmError) {
+        setError('Failed to load farms. Please retry.');
+        setLoading(false);
+      }
+    };
+
+    loadFarms();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedFarmId) return;
+
     const loadDashboardData = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const [recsResult, weatherResult, questionnaireResult] = await Promise.all([
-          ApiService.getLatestRecommendations().catch(() => null),
-          ApiService.getWeatherOverview().catch(() => null),
+        const [recsResult, weatherResult, questionnaireResult, cropsResult] = await Promise.all([
+          ApiService.getLatestRecommendations(selectedFarmId).catch(() => null),
+          ApiService.getWeatherOverview(selectedFarmId).catch(() => null),
           ApiService.getUserQuestionnaireResponses().catch(() => ({})),
+          ApiService.getFarmCrops(selectedFarmId).catch(() => []),
         ]);
 
         setRecommendations(recsResult);
         setWeatherOverview(weatherResult);
         setQuestionnaire(questionnaireResult || {});
-        setUserCrops([]);
+        setUserCrops((cropsResult || []).map((crop) => ({
+          id: crop.id,
+          name: crop.crop_name,
+          variety: crop.variety || 'Unknown variety',
+          area: crop.area_acres || 0,
+          plantingDate: crop.planting_date,
+          expectedHarvest: crop.expected_harvest_date,
+          health: 'Good',
+          moisture: weatherResult?.current?.humidity || 0,
+          temperature: weatherResult?.current?.temperature || 0,
+          status: crop.status === 'active' ? 'healthy' : crop.status,
+          lastUpdated: 'from saved record',
+        })));
       } catch (loadError) {
         setError('Failed to load dashboard data. Please retry.');
       } finally {
@@ -73,24 +105,49 @@ const Dashboard = () => {
     };
 
     loadDashboardData();
-  }, []);
+  }, [selectedFarmId]);
 
-  const handleAddCrop = (cropData) => {
-    const newCrop = {
-      id: Date.now(),
-      name: cropData.name,
-      variety: cropData.variety,
-      area: cropData.area,
-      plantingDate: cropData.plantingDate,
-      expectedHarvest: cropData.expectedHarvest,
-      health: 'Good',
-      moisture: Math.floor(Math.random() * 30) + 60,
-      temperature: Math.floor(Math.random() * 10) + 20,
-      status: 'healthy',
-      lastUpdated: 'Just now',
-    };
-    setUserCrops((prev) => [...prev, newCrop]);
-    setShowAddCropModal(false);
+  const handleAddCrop = async (cropData) => {
+    if (!selectedFarmId) return;
+    try {
+      const savedCrop = await ApiService.createFarmCrop({
+        farm_id: selectedFarmId,
+        crop_name: cropData.name,
+        variety: cropData.variety,
+        area_acres: Number(cropData.area),
+        planting_date: cropData.plantingDate || null,
+        expected_harvest_date: cropData.expectedHarvest || null,
+        added_by: 'user',
+      });
+      setUserCrops((prev) => [
+        {
+          id: savedCrop.id,
+          name: savedCrop.crop_name,
+          variety: savedCrop.variety || 'Unknown variety',
+          area: savedCrop.area_acres || 0,
+          plantingDate: savedCrop.planting_date,
+          expectedHarvest: savedCrop.expected_harvest_date,
+          health: 'Good',
+          moisture: weatherData.humidity || 0,
+          temperature: weatherData.temperature || 0,
+          status: 'healthy',
+          lastUpdated: 'Just now',
+        },
+        ...prev,
+      ]);
+      setShowAddCropModal(false);
+    } catch (saveError) {
+      setError('Failed to save crop. Please retry.');
+    }
+  };
+
+  const handleRemoveCrop = async (cropId) => {
+    try {
+      await ApiService.removeFarmCrop(cropId);
+      setUserCrops((prev) => prev.filter((crop) => crop.id !== cropId));
+    } catch (removeError) {
+      setError('Failed to remove crop. Please retry.');
+    }
   };
 
   const weatherData = useMemo(() => {
@@ -247,6 +304,19 @@ const Dashboard = () => {
               <h1 className="page-title">AgroBot Dashboard</h1>
               <p className="page-subtitle">Daily farming decisions, alerts, and crop actions in one place</p>
             </div>
+            {farms.length > 1 && (
+              <select
+                className="farm-switcher"
+                value={selectedFarmId || ''}
+                onChange={(event) => setSelectedFarmId(Number(event.target.value))}
+              >
+                {farms.map((farm) => (
+                  <option key={farm.id} value={farm.id}>
+                    {farm.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </header>
 
@@ -271,7 +341,7 @@ const Dashboard = () => {
               <CropMonitor
                 crops={userCrops}
                 onAddCrop={() => setShowAddCropModal(true)}
-                onRemoveCrop={(cropId) => setUserCrops((prev) => prev.filter((crop) => crop.id !== cropId))}
+                onRemoveCrop={handleRemoveCrop}
                 recommendations={recommendations}
                 showAddButton={false}
               />
@@ -291,7 +361,7 @@ const Dashboard = () => {
           <CropMonitor
             crops={userCrops}
             onAddCrop={() => setShowAddCropModal(true)}
-            onRemoveCrop={(cropId) => setUserCrops((prev) => prev.filter((crop) => crop.id !== cropId))}
+            onRemoveCrop={handleRemoveCrop}
             recommendations={recommendations}
             showAddButton={false}
           />
