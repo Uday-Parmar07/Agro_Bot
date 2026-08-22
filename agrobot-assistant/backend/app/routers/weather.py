@@ -1,12 +1,81 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from datetime import date
 
 from app.database.connection import get_db
-from app.database.schemas import User, QuestionnaireResponse
+from app.database.schemas import User, QuestionnaireResponse, WeatherSnapshot
+from app.services.farm_service import get_user_farm
 from app.services.weather_service import weather_service
 from app.utils.auth_utils import get_current_user
 
 router = APIRouter()
+
+
+def _snapshot_to_current(snapshot: WeatherSnapshot):
+    raw = snapshot.raw_json or {}
+    if isinstance(raw, dict) and raw.get("current"):
+        return raw["current"]
+    return {
+        "temperature": snapshot.temp,
+        "humidity": snapshot.humidity,
+        "pressure": raw.get("pressure", 0) if isinstance(raw, dict) else 0,
+        "wind_speed": raw.get("wind_speed", 0) if isinstance(raw, dict) else 0,
+        "description": raw.get("description", "cached") if isinstance(raw, dict) else "cached",
+        "visibility": raw.get("visibility", 0) if isinstance(raw, dict) else 0,
+        "location": raw.get("location", "Farm Location") if isinstance(raw, dict) else "Farm Location",
+        "_source": snapshot.source,
+    }
+
+
+def _snapshot_to_overview(snapshot: WeatherSnapshot):
+    raw = snapshot.raw_json or {}
+    if isinstance(raw, dict) and raw.get("current"):
+        return {
+            "current": raw["current"],
+            "forecast": raw.get("forecast", []),
+            "location": raw.get("location") or raw["current"].get("location"),
+        }
+    current = _snapshot_to_current(snapshot)
+    return {
+        "current": current,
+        "forecast": [],
+        "location": current.get("location"),
+    }
+
+
+def _get_today_snapshot(db: Session, farm_id: int):
+    return (
+        db.query(WeatherSnapshot)
+        .filter(WeatherSnapshot.farm_id == farm_id, WeatherSnapshot.date == date.today())
+        .first()
+    )
+
+
+def _save_weather_snapshot(db: Session, farm_id: int, current: dict, forecast: dict | None = None):
+    source = current.get("_source") or (forecast or {}).get("_source") or "mock"
+    forecast_items = (forecast or {}).get("forecast", [])
+    rainfall_mm = 0.0
+    if forecast_items:
+        rain_count = sum(1 for item in forecast_items if "rain" in str(item.get("description", "")).lower())
+        rainfall_mm = float(rain_count)
+
+    snapshot = WeatherSnapshot(
+        farm_id=farm_id,
+        date=date.today(),
+        source=source,
+        temp=current.get("temperature"),
+        humidity=current.get("humidity"),
+        rainfall_mm=rainfall_mm,
+        raw_json={
+            "current": current,
+            "forecast": forecast_items,
+            "location": current.get("location") or (forecast or {}).get("location"),
+        },
+    )
+    db.add(snapshot)
+    db.commit()
+    db.refresh(snapshot)
+    return snapshot
 
 
 def _get_user_location(db: Session, user_id: int):
@@ -39,9 +108,17 @@ def _get_user_location(db: Session, user_id: int):
 
 @router.get("/current")
 async def get_current_weather(
+    farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    farm = get_user_farm(db, current_user, farm_id)
+    db.commit()
+
+    snapshot = _get_today_snapshot(db, farm.id)
+    if snapshot:
+        return _snapshot_to_current(snapshot)
+
     city, state = _get_user_location(db, current_user.id)
     data = await weather_service.get_current_weather(city=city, state=state)
 
@@ -51,14 +128,19 @@ async def get_current_weather(
             detail="Unable to fetch weather data",
         )
 
+    _save_weather_snapshot(db, farm.id, data)
     return data
 
 
 @router.get("/forecast")
 async def get_weather_forecast(
+    farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    get_user_farm(db, current_user, farm_id)
+    db.commit()
+
     city, state = _get_user_location(db, current_user.id)
     data = await weather_service.get_weather_forecast(city=city, state=state)
 
@@ -73,9 +155,17 @@ async def get_weather_forecast(
 
 @router.get("/overview")
 async def get_weather_overview(
+    farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    farm = get_user_farm(db, current_user, farm_id)
+    db.commit()
+
+    snapshot = _get_today_snapshot(db, farm.id)
+    if snapshot:
+        return _snapshot_to_overview(snapshot)
+
     city, state = _get_user_location(db, current_user.id)
     current = await weather_service.get_current_weather(city=city, state=state)
     forecast = await weather_service.get_weather_forecast(city=city, state=state)
@@ -86,6 +176,7 @@ async def get_weather_overview(
             detail="Unable to fetch weather overview",
         )
 
+    _save_weather_snapshot(db, farm.id, current, forecast)
     return {
         "current": current,
         "forecast": forecast.get("forecast", []),

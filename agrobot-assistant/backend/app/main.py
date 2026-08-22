@@ -3,8 +3,8 @@ from pathlib import Path
 from fastapi import FastAPI, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, questionnaire, recommendations, disease, weather
-from app.database.connection import create_tables
+from app.routers import analytics, auth, dashboard, farms, questionnaire, recommendations, disease, weather
+from app.database.migrations import run_migrations
 
 app = FastAPI(
     title="AgroBot API",
@@ -28,10 +28,13 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(farms.router, prefix="/api/farms", tags=["Farms"])
 app.include_router(questionnaire.router, prefix="/api/questionnaire", tags=["Questionnaire"])
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["AI Recommendations"])
 app.include_router(disease.router, prefix="/api/disease", tags=["Disease Checkup"])
 app.include_router(weather.router, prefix="/api/weather", tags=["Weather"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_BUILD_DIR = BASE_DIR / "frontend" / "build"
@@ -39,7 +42,7 @@ FRONTEND_INDEX = FRONTEND_BUILD_DIR / "index.html"
 
 @app.on_event("startup")
 async def startup_event():
-    create_tables()
+    run_migrations()
 
 @app.get("/")
 async def root():

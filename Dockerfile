@@ -22,6 +22,7 @@ RUN pip install --prefix=/install/deps --no-warn-script-location \
     uvicorn==0.24.0 \
     "pydantic[email]==2.5.0" \
     sqlalchemy==2.0.23 \
+    alembic==1.13.1 \
     psycopg2-binary==2.9.9 \
     "psycopg[binary]==3.2.1" \
     "python-jose[cryptography]==3.3.0" \

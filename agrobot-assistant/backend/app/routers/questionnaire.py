@@ -4,6 +4,7 @@ from app.models.questionnaire import QuestionnaireSubmission, CompleteQuestionna
 from app.models.user import UserResponse
 from app.database.connection import get_db
 from app.database.schemas import User, QuestionnaireResponse
+from app.services.farm_service import get_or_create_default_farm
 from app.utils.auth_utils import get_current_user
 from typing import Dict, Any
 
@@ -22,9 +23,12 @@ async def submit_questionnaire_set(
             detail="Not authorized to submit for this user"
         )
     
+    farm = get_or_create_default_farm(db, current_user)
+
     # Save or update questionnaire response
     existing_response = db.query(QuestionnaireResponse).filter(
         QuestionnaireResponse.user_id == submission.user_id,
+        QuestionnaireResponse.farm_id == farm.id,
         QuestionnaireResponse.set_number == submission.set_number
     ).first()
     
@@ -33,6 +37,7 @@ async def submit_questionnaire_set(
     else:
         new_response = QuestionnaireResponse(
             user_id=submission.user_id,
+            farm_id=farm.id,
             set_number=submission.set_number,
             answers=submission.answers
         )
@@ -55,6 +60,8 @@ async def complete_questionnaire(
             detail="Not authorized"
         )
     
+    farm = get_or_create_default_farm(db, current_user)
+
     # Save all questionnaire data
     questionnaire_data = {
         1: questionnaire.soil_physical.dict(),
@@ -68,6 +75,7 @@ async def complete_questionnaire(
     for set_num, answers in questionnaire_data.items():
         existing_response = db.query(QuestionnaireResponse).filter(
             QuestionnaireResponse.user_id == questionnaire.user_id,
+            QuestionnaireResponse.farm_id == farm.id,
             QuestionnaireResponse.set_number == set_num
         ).first()
         
@@ -76,6 +84,7 @@ async def complete_questionnaire(
         else:
             new_response = QuestionnaireResponse(
                 user_id=questionnaire.user_id,
+                farm_id=farm.id,
                 set_number=set_num,
                 answers=answers
             )
@@ -94,8 +103,12 @@ async def get_user_questionnaire_responses(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    farm = get_or_create_default_farm(db, current_user)
+    db.commit()
+
     responses = db.query(QuestionnaireResponse).filter(
-        QuestionnaireResponse.user_id == current_user.id
+        QuestionnaireResponse.user_id == current_user.id,
+        QuestionnaireResponse.farm_id == farm.id
     ).all()
     
     formatted_responses = {}

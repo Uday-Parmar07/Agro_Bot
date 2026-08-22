@@ -6,6 +6,7 @@ from app.database.schemas import User, QuestionnaireResponse, Recommendation
 from app.utils.auth_utils import get_current_user
 from app.services.ai_service import ai_service
 from app.services.government_api_service import generate_government_schemes
+from app.services.farm_service import get_user_farm
 from datetime import datetime, date
 import logging
 import traceback
@@ -32,11 +33,12 @@ def _serialize_recommendation_payload(recommendations: AIRecommendationResponse)
     return recommended_crops_serializable, farming_calendar_serializable
 
 
-def _save_recommendation(db: Session, user_id: int, recommendations: AIRecommendationResponse) -> Recommendation:
+def _save_recommendation(db: Session, user_id: int, farm_id: int, recommendations: AIRecommendationResponse) -> Recommendation:
     recommended_crops_serializable, farming_calendar_serializable = _serialize_recommendation_payload(recommendations)
 
     db_recommendation = Recommendation(
         user_id=user_id,
+        farm_id=farm_id,
         soil_health_score=recommendations.soil_health_score,
         recommended_crops=recommended_crops_serializable,
         farming_calendar=farming_calendar_serializable,
@@ -113,6 +115,7 @@ def _build_user_profile_from_responses(responses):
 
 @router.post("/generate", response_model=AIRecommendationResponse)
 async def generate_recommendations(
+    farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -130,10 +133,14 @@ async def generate_recommendations(
                 detail="Please complete the questionnaire first"
             )
         
+        farm = get_user_farm(db, current_user, farm_id)
+        db.commit()
+
         # Get all questionnaire responses for the user
         logger.info(f"📋 Fetching questionnaire responses for user {current_user.id}")
         responses = db.query(QuestionnaireResponse).filter(
-            QuestionnaireResponse.user_id == current_user.id
+            QuestionnaireResponse.user_id == current_user.id,
+            QuestionnaireResponse.farm_id == farm.id
         ).all()
         
         logger.info(f"📊 Found {len(responses)} questionnaire responses")
@@ -159,7 +166,7 @@ async def generate_recommendations(
         # Save recommendations to database
         logger.info("💾 Saving recommendations to database...")
         try:
-            db_recommendation = _save_recommendation(db, current_user.id, recommendations)
+            db_recommendation = _save_recommendation(db, current_user.id, farm.id, recommendations)
             logger.info(f"🔄 Saved recommendation - DB ID: {db_recommendation.id}")
 
         except Exception as db_error:
@@ -187,6 +194,7 @@ async def generate_recommendations(
 
 @router.get("/latest", response_model=AIRecommendationResponse)
 async def get_latest_recommendations(
+    farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -194,12 +202,17 @@ async def get_latest_recommendations(
     
     logger.info(f"📊 Fetching latest recommendations for user {current_user.id}")
     
+    farm = get_user_farm(db, current_user, farm_id)
+    db.commit()
+
     latest_recommendation = db.query(Recommendation).filter(
-        Recommendation.user_id == current_user.id
+        Recommendation.user_id == current_user.id,
+        Recommendation.farm_id == farm.id
     ).order_by(Recommendation.generated_at.desc()).first()
 
     responses = db.query(QuestionnaireResponse).filter(
-        QuestionnaireResponse.user_id == current_user.id
+        QuestionnaireResponse.user_id == current_user.id,
+        QuestionnaireResponse.farm_id == farm.id
     ).all()
 
     latest_questionnaire_update = max((resp.updated_at for resp in responses), default=None)
@@ -212,7 +225,7 @@ async def get_latest_recommendations(
                 user_data[f"set_{response.set_number}"] = response.answers
 
             regenerated = await ai_service.generate_farming_recommendations(user_data)
-            latest_recommendation = _save_recommendation(db, current_user.id, regenerated)
+            latest_recommendation = _save_recommendation(db, current_user.id, farm.id, regenerated)
             logger.info("✅ Regenerated recommendation ID %s", latest_recommendation.id)
         except Exception as e:
             logger.error("❌ Failed to regenerate stale recommendation: %s", e)
@@ -243,12 +256,17 @@ async def get_latest_recommendations(
 
 @router.get("/government-schemes")
 async def get_government_schemes(
+    farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Generate government scheme suggestions using questionnaire data."""
+    farm = get_user_farm(db, current_user, farm_id)
+    db.commit()
+
     responses = db.query(QuestionnaireResponse).filter(
-        QuestionnaireResponse.user_id == current_user.id
+        QuestionnaireResponse.user_id == current_user.id,
+        QuestionnaireResponse.farm_id == farm.id
     ).all()
 
     if not responses:
@@ -274,6 +292,7 @@ async def get_government_schemes(
 
 @router.get("/history")
 async def get_recommendation_history(
+    farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -281,8 +300,12 @@ async def get_recommendation_history(
     
     logger.info(f"📈 Fetching recommendation history for user {current_user.id}")
     
+    farm = get_user_farm(db, current_user, farm_id)
+    db.commit()
+
     recommendations = db.query(Recommendation).filter(
-        Recommendation.user_id == current_user.id
+        Recommendation.user_id == current_user.id,
+        Recommendation.farm_id == farm.id
     ).order_by(Recommendation.generated_at.desc()).all()
     
     logger.info(f"📊 Found {len(recommendations)} historical recommendations")

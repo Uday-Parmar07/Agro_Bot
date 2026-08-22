@@ -44,7 +44,8 @@ class WeatherService:
                         "wind_speed": data["wind"]["speed"],
                         "description": data["weather"][0]["description"],
                         "visibility": data.get("visibility", 10000) / 1000,  # Convert to km
-                        "location": data.get("name") or f"{city}, {state}"
+                        "location": data.get("name") or f"{city}, {state}",
+                        "_source": "openweather",
                     }
                 else:
                     return self._get_mock_weather_data(city, state)
@@ -100,7 +101,8 @@ class WeatherService:
                             break
                     return {
                         "forecast": forecast,
-                        "location": data.get("city", {}).get("name") or f"{city}, {state}"
+                        "location": data.get("city", {}).get("name") or f"{city}, {state}",
+                        "_source": "openweather",
                     }
                 else:
                     return self._get_mock_forecast_data(city, state)
@@ -130,7 +132,8 @@ class WeatherService:
             "wind_speed": wind_speed,
             "description": description,
             "visibility": 10,
-            "location": f"{city}, {state}"
+            "location": f"{city}, {state}",
+            "_source": "mock",
         }
     
     def _get_mock_forecast_data(self, city: str, state: str) -> Dict[str, Any]:
@@ -152,7 +155,8 @@ class WeatherService:
 
         return {
             "forecast": forecast,
-            "location": f"{city}, {state}"
+            "location": f"{city}, {state}",
+            "_source": "mock",
         }
 
 # Initialize weather service

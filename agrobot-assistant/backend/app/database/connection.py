@@ -1,6 +1,5 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.database.schemas import Base
 from dotenv import load_dotenv, dotenv_values
 from pathlib import Path
 import os
@@ -41,10 +40,6 @@ else:
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def create_tables():
-    """Create all database tables"""
-    Base.metadata.create_all(bind=engine)
 
 def get_db():
     """Dependency to get database session"""
