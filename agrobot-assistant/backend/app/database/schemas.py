@@ -14,6 +14,8 @@ class User(Base):
     phone_number = Column(String, nullable=True)
     is_new_user = Column(Boolean, default=True)
     onboarding_completed = Column(Boolean, default=False)
+    preferred_language = Column(String, nullable=False, default='en')
+    role = Column(String, nullable=False, default='farmer')
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -21,6 +23,9 @@ class User(Base):
     farms = relationship('Farm', back_populates='user')
     questionnaire_responses = relationship('QuestionnaireResponse', back_populates='user')
     recommendations = relationship('Recommendation', back_populates='user')
+    marketplace_listings = relationship('MarketplaceListing', back_populates='farmer')
+    forum_posts = relationship('ForumPost', back_populates='user')
+    forum_replies = relationship('ForumReply', back_populates='user')
 
 class Farm(Base):
     __tablename__ = 'farms'
@@ -123,3 +128,99 @@ class FarmCrop(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     farm = relationship('Farm', back_populates='crops')
+    harvest_outcomes = relationship('HarvestOutcome', back_populates='farm_crop')
+
+class AdvisorFarmerLink(Base):
+    __tablename__ = 'advisor_farmer_links'
+
+    id = Column(Integer, primary_key=True, index=True)
+    advisor_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    farmer_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+
+class SchemeRecord(Base):
+    __tablename__ = 'scheme_records'
+
+    id = Column(Integer, primary_key=True, index=True)
+    farm_id = Column(Integer, ForeignKey('farms.id'), nullable=False, index=True)
+    scheme_name = Column(String, nullable=False)
+    source_url = Column(String, nullable=True)
+    summary = Column(String, nullable=True)
+    eligibility_text = Column(String, nullable=True)
+    estimated_benefit = Column(String, nullable=True)
+    status = Column(String, nullable=False, default='saved')
+    applied_at = Column(DateTime, nullable=True)
+    notes = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class HarvestOutcome(Base):
+    __tablename__ = 'harvest_outcomes'
+
+    id = Column(Integer, primary_key=True, index=True)
+    farm_crop_id = Column(Integer, ForeignKey('farm_crops.id'), nullable=False, index=True)
+    actual_yield = Column(Float, nullable=False)
+    unit = Column(String, nullable=False)
+    sale_price_per_unit = Column(Float, nullable=False)
+    harvested_at = Column(Date, nullable=False)
+    notes = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    farm_crop = relationship('FarmCrop', back_populates='harvest_outcomes')
+
+class MarketplaceListing(Base):
+    __tablename__ = 'marketplace_listings'
+
+    id = Column(Integer, primary_key=True, index=True)
+    farmer_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    crop_name = Column(String, nullable=False)
+    quantity = Column(Float, nullable=False)
+    unit = Column(String, nullable=False)
+    price = Column(Float, nullable=False)
+    location = Column(String, nullable=True)
+    contact_pref = Column(String, nullable=True)
+    status = Column(String, nullable=False, default='active')
+    hidden = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    farmer = relationship('User', back_populates='marketplace_listings')
+
+class ForumPost(Base):
+    __tablename__ = 'forum_posts'
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    region = Column(String, nullable=False, index=True)
+    crop_tag = Column(String, nullable=True)
+    title = Column(String, nullable=False)
+    body = Column(String, nullable=False)
+    hidden = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship('User', back_populates='forum_posts')
+    replies = relationship('ForumReply', back_populates='post')
+
+class ForumReply(Base):
+    __tablename__ = 'forum_replies'
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey('forum_posts.id'), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    body = Column(String, nullable=False)
+    hidden = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    post = relationship('ForumPost', back_populates='replies')
+    user = relationship('User', back_populates='forum_replies')
+
+class Report(Base):
+    __tablename__ = 'reports'
+
+    id = Column(Integer, primary_key=True, index=True)
+    target_type = Column(String, nullable=False)
+    target_id = Column(Integer, nullable=False)
+    reported_by = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    reason = Column(String, nullable=False)
+    status = Column(String, nullable=False, default='open')
+    created_at = Column(DateTime, default=datetime.utcnow)

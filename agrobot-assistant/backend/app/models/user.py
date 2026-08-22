@@ -19,8 +19,14 @@ class UserResponse(BaseModel):
     is_new_user: bool
     created_at: datetime
     onboarding_completed: bool
+    preferred_language: str = "en"
+    role: str = "farmer"
 
 class Token(BaseModel):
     access_token: str
     token_type: str
     user: UserResponse
+
+
+class LanguageUpdate(BaseModel):
+    preferred_language: str

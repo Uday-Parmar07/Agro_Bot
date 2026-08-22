@@ -153,7 +153,7 @@ async def generate_recommendations(
             )
         
         # Prepare user data for AI service
-        user_data = {"user_id": current_user.id}
+        user_data = {"user_id": current_user.id, "preferred_language": current_user.preferred_language}
         for response in responses:
             user_data[f"set_{response.set_number}"] = response.answers
             logger.info(f"✅ Set {response.set_number} loaded: {list(response.answers.keys())}")
@@ -220,7 +220,7 @@ async def get_latest_recommendations(
     if latest_recommendation and latest_questionnaire_update and latest_recommendation.generated_at < latest_questionnaire_update:
         logger.info("🔄 Recommendation is stale for user %s. Regenerating from latest questionnaire data.", current_user.id)
         try:
-            user_data = {"user_id": current_user.id}
+            user_data = {"user_id": current_user.id, "preferred_language": current_user.preferred_language}
             for response in responses:
                 user_data[f"set_{response.set_number}"] = response.answers
 
@@ -276,6 +276,7 @@ async def get_government_schemes(
         )
 
     profile = _build_user_profile_from_responses(responses)
+    profile["preferred_language"] = current_user.preferred_language
 
     try:
         result = generate_government_schemes(profile)

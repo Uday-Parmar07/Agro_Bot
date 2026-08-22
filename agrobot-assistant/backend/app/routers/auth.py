@@ -36,7 +36,7 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     
     # Create access token
-    access_token = create_access_token(data={"sub": new_user.email})
+    access_token = create_access_token(data={"sub": new_user.email, "role": new_user.role})
     
     user_response = UserResponse(
         id=new_user.id,
@@ -44,7 +44,9 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
         full_name=new_user.full_name,
         is_new_user=new_user.is_new_user,
         created_at=new_user.created_at,
-        onboarding_completed=new_user.onboarding_completed
+        onboarding_completed=new_user.onboarding_completed,
+        preferred_language=new_user.preferred_language,
+        role=new_user.role,
     )
     
     return Token(access_token=access_token, token_type="bearer", user=user_response)
@@ -60,7 +62,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token = create_access_token(data={"sub": user.email})
+    access_token = create_access_token(data={"sub": user.email, "role": user.role})
     
     user_response = UserResponse(
         id=user.id,
@@ -68,7 +70,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
         full_name=user.full_name,
         is_new_user=user.is_new_user,
         created_at=user.created_at,
-        onboarding_completed=user.onboarding_completed
+        onboarding_completed=user.onboarding_completed,
+        preferred_language=user.preferred_language,
+        role=user.role,
     )
     
     return Token(access_token=access_token, token_type="bearer", user=user_response)
@@ -81,5 +85,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         full_name=current_user.full_name,
         is_new_user=current_user.is_new_user,
         created_at=current_user.created_at,
-        onboarding_completed=current_user.onboarding_completed
+        onboarding_completed=current_user.onboarding_completed,
+        preferred_language=current_user.preferred_language,
+        role=current_user.role,
     )

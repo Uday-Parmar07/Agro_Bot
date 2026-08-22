@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import analytics, auth, dashboard, farms, questionnaire, recommendations, disease, weather
+from app.routers import analytics, auth, advisor, community, dashboard, farms, harvest, marketplace, questionnaire, recommendations, reports, schemes, disease, users, voice, weather
 from app.database.migrations import run_migrations
 
 app = FastAPI(
@@ -28,13 +28,21 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(farms.router, prefix="/api/farms", tags=["Farms"])
 app.include_router(questionnaire.router, prefix="/api/questionnaire", tags=["Questionnaire"])
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["AI Recommendations"])
 app.include_router(disease.router, prefix="/api/disease", tags=["Disease Checkup"])
 app.include_router(weather.router, prefix="/api/weather", tags=["Weather"])
+app.include_router(voice.router, prefix="/api/voice", tags=["Voice"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+app.include_router(advisor.router, prefix="/api/advisor", tags=["Advisor"])
+app.include_router(schemes.router, prefix="/api/schemes", tags=["Schemes"])
+app.include_router(harvest.router, prefix="/api/harvest-outcomes", tags=["Harvest Outcomes"])
+app.include_router(marketplace.router, prefix="/api/marketplace", tags=["Marketplace"])
+app.include_router(community.router, prefix="/api/forum", tags=["Community Forum"])
+app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_BUILD_DIR = BASE_DIR / "frontend" / "build"

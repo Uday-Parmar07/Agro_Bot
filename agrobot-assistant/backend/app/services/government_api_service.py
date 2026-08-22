@@ -19,12 +19,6 @@ load_dotenv()
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-if not TAVILY_API_KEY:
-    raise RuntimeError("TAVILY_API_KEY not set. Add it to your environment or .env file.")
-
-if not GROQ_API_KEY:
-    raise RuntimeError("GROQ_API_KEY not set. Add it to your environment or .env file.")
-
 
 ALLOWED_DOMAINS: List[str] = [
     "gov.in",
@@ -36,8 +30,8 @@ ALLOWED_DOMAINS: List[str] = [
     "punjab.gov.in",
 ]
 
-tavily = TavilyClient(api_key=TAVILY_API_KEY)
-groq_client = Groq(api_key=GROQ_API_KEY)
+tavily = TavilyClient(api_key=TAVILY_API_KEY) if TAVILY_API_KEY else None
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 
 def _domain_from_url(url: str) -> str:
@@ -49,6 +43,8 @@ def _domain_from_url(url: str) -> str:
 
 def _search_government_schemes(location: str, crop_focus: str = "") -> Tuple[str, List[Dict[str, str]]]:
     """Search official government domains with deeper, multi-query retrieval."""
+    if tavily is None:
+        return "", []
     queries = [
         f"farmer scheme {location} eligibility how to apply official site",
         f"agriculture subsidy {location} farmer apply portal gov.in",
@@ -115,10 +111,12 @@ def _build_prompt(user_data: Dict[str, Any], schemes_text: str) -> str:
     soil_line = f"Soil: {soil}" if soil else ""
 
     profile = " | ".join(p for p in [acreage_line, irrigation_line, soil_line] if p)
+    language = "Hindi" if user_data.get("preferred_language") == "hi" else "English"
 
     return f"""
 You are an assistant that recommends official Indian government farmer schemes.
 Use only the supplied government data.
+Write all farmer-facing fields in {language}.
 
 Farmer location: {location}
 Primary crops: {crop_line}
@@ -415,6 +413,9 @@ def generate_government_schemes(user_data: Dict[str, Any]) -> Dict[str, Any]:
 
     schemes_text, sources = _search_government_schemes(location, crop_focus)
     prompt = _build_prompt(user_data, schemes_text)
+
+    if groq_client is None or not sources:
+        return _fallback_from_sources(location=location, sources=sources)
 
     try:
         completion = groq_client.chat.completions.create(

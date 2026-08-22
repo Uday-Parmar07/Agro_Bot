@@ -105,7 +105,7 @@ class DiseaseInferenceService:
             "llm_enhanced": False,
         }
 
-    def _llm_insights(self, image_bytes: bytes, content_type: str, class_name: str) -> dict:
+    def _llm_insights(self, image_bytes: bytes, content_type: str, class_name: str, language: str = "en") -> dict:
         if self._groq_client is None:
             return self._fallback_insights(class_name)
 
@@ -117,7 +117,8 @@ class DiseaseInferenceService:
                 "You are an expert plant pathologist. Analyze the uploaded leaf image and the CNN suggestion. "
                 "Return strict JSON with keys: detailed_classification, possible_cause, treatment. "
                 f"CNN predicted class: {class_name}. "
-                "Treatment must be practical, concise, and farmer-friendly."
+                "Treatment must be practical, concise, and farmer-friendly. "
+                f"Write farmer-facing text in {'Hindi' if language == 'hi' else 'English'}."
             )
 
             completion = self._groq_client.chat.completions.create(
@@ -189,7 +190,7 @@ class DiseaseInferenceService:
         self._model = model
         self._loaded = True
 
-    def predict(self, image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
+    def predict(self, image_bytes: bytes, content_type: str = "image/jpeg", language: str = "en") -> dict:
         try:
             self._ensure_loaded()
         except Exception as exc:
@@ -222,7 +223,12 @@ class DiseaseInferenceService:
 
         predicted_class = self._class_names[pred_idx.item()]
         confidence = float(score.item())
-        insights = self._llm_insights(image_bytes=image_bytes, content_type=content_type, class_name=predicted_class)
+        insights = self._llm_insights(
+            image_bytes=image_bytes,
+            content_type=content_type,
+            class_name=predicted_class,
+            language=language,
+        )
 
         return {
             "predicted_class": predicted_class,

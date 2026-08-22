@@ -17,6 +17,7 @@ def generate_farming_prompt(user_data: Dict[str, Any],
    organic_practices = user_data.get("set_5", {})
 
    profile = {
+      "preferred_language": user_data.get("preferred_language", "en"),
       "soil_physical": {
          "soil_texture": soil_physical.get("soil_texture", "Not specified"),
          "water_retention": soil_physical.get("water_retention", "Not specified"),

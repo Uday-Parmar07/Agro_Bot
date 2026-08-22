@@ -42,6 +42,8 @@ class AIService:
         
         try:
             # Call Groq API with Llama model
+            language = user_data.get("preferred_language", "en")
+            language_instruction = "Hindi" if language == "hi" else "English"
             completion = self.client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[
@@ -53,6 +55,7 @@ class AIService:
                         - Do NOT repeat, quote, paraphrase, or restate the input prompt/context.
                         - Do NOT include headings like 'SOIL PHYSICAL PROPERTIES' or any template text from user prompt.
                         - Use the provided farm data to infer recommendations.
+                        - Write all farmer-facing strings in the requested language.
 
                         Return your response in this exact JSON schema:
                         {
@@ -84,7 +87,7 @@ class AIService:
                     },
                     {
                         "role": "user",
-                        "content": f"Generate recommendations from the following farm profile. Do not echo this text.\\n\\n{prompt}"
+                        "content": f"Generate recommendations in {language_instruction} from the following farm profile. Do not echo this text.\\n\\n{prompt}"
                     }
                 ],
                 temperature=0.3,  # Lower temperature for more consistent JSON
@@ -130,6 +133,23 @@ class AIService:
         except Exception as e:
             logger.exception("Error calling Groq API: %s", e)
             return self._generate_fallback_response(user_data)
+
+    async def transcribe_audio(self, filename: str, content: bytes, content_type: str) -> str:
+        if self.client is None:
+            return ""
+        try:
+            import io
+
+            audio_file = io.BytesIO(content)
+            audio_file.name = filename or "audio.webm"
+            transcript = self.client.audio.transcriptions.create(
+                file=(audio_file.name, audio_file, content_type),
+                model="whisper-large-v3",
+            )
+            return getattr(transcript, "text", "") or ""
+        except Exception as exc:
+            logger.warning("Voice transcription failed: %s", exc)
+            return ""
 
     def _personalize_recommendation_lists(self, user_data: Dict[str, Any], parsed_response: Dict[str, Any]) -> Dict[str, Any]:
         soil_physical = user_data.get("set_1", {})

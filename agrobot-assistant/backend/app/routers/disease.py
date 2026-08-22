@@ -35,7 +35,11 @@ async def predict_disease(
         farm = get_user_farm(db, current_user, farm_id)
         db.commit()
 
-        result = disease_inference_service.predict(image_bytes, image.content_type)
+        result = disease_inference_service.predict(
+            image_bytes,
+            image.content_type,
+            language=current_user.preferred_language,
+        )
         prediction = DiseasePrediction(
             farm_id=farm.id,
             image_path=image.filename or "uploaded_image",
