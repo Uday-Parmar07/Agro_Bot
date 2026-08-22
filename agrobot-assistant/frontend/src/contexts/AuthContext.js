@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import ApiService from '../services/api';
+import i18n from '../i18n';
 
 const AuthContext = createContext();
 
@@ -27,6 +28,7 @@ export const AuthProvider = ({ children }) => {
           const parsed = JSON.parse(savedUser);
           setUser(parsed);
           setIsAuthenticated(true);
+          if (parsed.preferred_language) i18n.changeLanguage(parsed.preferred_language);
         } catch {
           localStorage.removeItem('access_token');
           localStorage.removeItem('user');
@@ -38,6 +40,8 @@ export const AuthProvider = ({ children }) => {
           const userData = await ApiService.getCurrentUser();
           setUser(userData);
           localStorage.setItem('user', JSON.stringify(userData));
+          localStorage.setItem('preferred_language', userData.preferred_language || 'en');
+          i18n.changeLanguage(userData.preferred_language || 'en');
         } catch {
           localStorage.removeItem('access_token');
           localStorage.removeItem('user');
@@ -62,6 +66,8 @@ export const AuthProvider = ({ children }) => {
       
       setUser(userData);
       setIsAuthenticated(true);
+      localStorage.setItem('preferred_language', userData.preferred_language || 'en');
+      i18n.changeLanguage(userData.preferred_language || 'en');
       
       return { success: true, user: userData };
     } catch (error) {
@@ -82,6 +88,8 @@ export const AuthProvider = ({ children }) => {
       
       setUser(newUser);
       setIsAuthenticated(true);
+      localStorage.setItem('preferred_language', newUser.preferred_language || 'en');
+      i18n.changeLanguage(newUser.preferred_language || 'en');
       
       return { success: true, user: newUser };
     } catch (error) {
@@ -104,6 +112,14 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user', JSON.stringify(userData));
   };
 
+  const updateLanguage = async (preferredLanguage) => {
+    const userData = await ApiService.updatePreferredLanguage(preferredLanguage);
+    updateUser(userData);
+    localStorage.setItem('preferred_language', preferredLanguage);
+    i18n.changeLanguage(preferredLanguage);
+    return userData;
+  };
+
   const value = {
     user,
     isAuthenticated,
@@ -111,7 +127,8 @@ export const AuthProvider = ({ children }) => {
     login,
     signup,
     logout,
-    updateUser
+    updateUser,
+    updateLanguage
   };
 
   return (

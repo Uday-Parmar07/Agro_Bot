@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import {
   Leaf, Upload, Camera, ArrowLeft, Search, RotateCcw, ChevronRight,
   Sun, Focus, ImageOff, AlertTriangle, CheckCircle2, XCircle, Shield,
-  Sparkles, Bug, Pill, ShieldCheck, Info, Loader2, X,
+  Sparkles, Bug, Pill, ShieldCheck, X,
 } from 'lucide-react';
 import ApiService from '../services/api';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { speakText } from '../utils/speech';
 import './DiseaseCheckup.css';
 
 /* ── i18n ── */
@@ -110,7 +112,8 @@ const DiseaseCheckup = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  const [voiceNote, setVoiceNote] = useState('');
+  const voice = useVoiceRecorder();
 
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
@@ -166,18 +169,24 @@ const DiseaseCheckup = () => {
     }
   };
 
+  const handleVoiceNote = async () => {
+    if (!voice.recording) {
+      await voice.start();
+      return;
+    }
+    const transcript = await voice.stop();
+    setVoiceNote(transcript);
+  };
+
   /* ── reset ── */
   const resetAll = () => {
     setFile(null);
     setResult(null);
     setError('');
     setStep(1);
-    setDetailOpen(false);
     if (fileRef.current) fileRef.current.value = '';
     if (cameraRef.current) cameraRef.current.value = '';
   };
-
-  const goToStep2 = () => { setResult(null); setError(''); setStep(2); };
 
   const lowConfidence = result && result.confidence < LOW_CONFIDENCE;
   const healthy = result && isHealthy(result.predicted_class);
@@ -236,7 +245,12 @@ const DiseaseCheckup = () => {
                 <button className="dc-camera-btn" onClick={() => cameraRef.current?.click()}>
                   <Camera size={16} />{t.cameraBtn}
                 </button>
+                <button className="dc-camera-btn" onClick={handleVoiceNote}>
+                  {voice.recording ? 'Use Note' : 'Voice Note'}
+                </button>
               </div>
+              {voiceNote && <span className="dc-accepted">Transcript: {voiceNote}</span>}
+              {voice.error && <span className="dc-accepted">{voice.error}</span>}
               <span className="dc-accepted">{t.accepted}</span>
               <input ref={fileRef} type="file" accept="image/jpeg,image/png" onChange={handleFileChange} hidden />
               <input ref={cameraRef} type="file" accept="image/jpeg,image/png" capture="environment" onChange={handleFileChange} hidden />
@@ -318,6 +332,12 @@ const DiseaseCheckup = () => {
               <div className="dc-result-badge-row">
                 <span className="dc-ai-badge"><Sparkles size={12} />{t.aiPowered}</span>
                 {result.llm_enhanced && <span className="dc-llm-badge">LLM Enhanced</span>}
+                <button
+                  className="dc-llm-badge"
+                  onClick={() => speakText(`${result.detailed_classification}. ${result.possible_cause}. ${result.treatment}`, lang)}
+                >
+                  Speak
+                </button>
               </div>
 
               {/* image + status */}

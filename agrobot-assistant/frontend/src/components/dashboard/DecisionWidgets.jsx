@@ -1,5 +1,6 @@
 import React from 'react';
-import { Home, Sprout, CloudSun, BarChart3, Activity, RefreshCcw, Landmark, Settings, Bell, Plus, CloudRain, Droplets, Wind, Thermometer, MessageCircle } from 'lucide-react';
+import { Home, Sprout, CloudSun, BarChart3, Activity, RefreshCcw, Landmark, Settings, Bell, Plus, CloudRain, Droplets, Wind, Thermometer, MessageCircle, Wallet, Store, Users, UserCheck } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 const priorityClass = (priority) => {
   const value = String(priority || '').toLowerCase();
@@ -9,6 +10,7 @@ const priorityClass = (priority) => {
 };
 
 export const DecisionSidebar = ({ user, activeTab, setActiveTab, logout, onAddCrop }) => {
+  const { t } = useTranslation();
   const itemClass = (key) => `nav-item ${activeTab === key ? 'active' : ''}`;
 
   return (
@@ -21,14 +23,19 @@ export const DecisionSidebar = ({ user, activeTab, setActiveTab, logout, onAddCr
       </div>
 
       <nav className="sidebar-nav">
-        <button className={itemClass('dashboard')} onClick={() => setActiveTab('dashboard')}><Home size={18} /><span>Dashboard</span></button>
-        <button className={itemClass('crops')} onClick={() => setActiveTab('crops')}><Sprout size={18} /><span>My Crops</span></button>
-        <button className={itemClass('weather')} onClick={() => setActiveTab('weather')}><CloudSun size={18} /><span>Weather</span></button>
-        <button className={itemClass('insights')} onClick={() => setActiveTab('insights')}><BarChart3 size={18} /><span>Farm Insights</span></button>
-        <button className="nav-item" onClick={() => (window.location.href = '/disease-checkup')}><Activity size={18} /><span>Disease Detection</span></button>
-        <button className="nav-item" onClick={() => (window.location.href = '/questionnaire?refill=1')}><RefreshCcw size={18} /><span>Update Farm Info</span></button>
-        <button className="nav-item" onClick={() => (window.location.href = '/government-schemes')}><Landmark size={18} /><span>Government Schemes</span></button>
-        <button className={itemClass('settings')} onClick={() => setActiveTab('settings')}><Settings size={18} /><span>Settings</span></button>
+        <button className={itemClass('dashboard')} onClick={() => setActiveTab('dashboard')}><Home size={18} /><span>{t('nav.dashboard')}</span></button>
+        <button className={itemClass('crops')} onClick={() => setActiveTab('crops')}><Sprout size={18} /><span>{t('nav.crops')}</span></button>
+        <button className={itemClass('weather')} onClick={() => setActiveTab('weather')}><CloudSun size={18} /><span>{t('nav.weather')}</span></button>
+        <button className={itemClass('insights')} onClick={() => setActiveTab('insights')}><BarChart3 size={18} /><span>{t('nav.insights')}</span></button>
+        <button className="nav-item" onClick={() => (window.location.href = '/analytics')}><BarChart3 size={18} /><span>{t('nav.analytics')}</span></button>
+        <button className="nav-item" onClick={() => (window.location.href = '/disease-checkup')}><Activity size={18} /><span>{t('nav.disease')}</span></button>
+        <button className="nav-item" onClick={() => (window.location.href = '/questionnaire?refill=1')}><RefreshCcw size={18} /><span>{t('nav.questionnaire')}</span></button>
+        <button className="nav-item" onClick={() => (window.location.href = '/government-schemes')}><Landmark size={18} /><span>{t('nav.schemes')}</span></button>
+        <button className="nav-item" onClick={() => (window.location.href = '/finance')}><Wallet size={18} /><span>{t('nav.finance')}</span></button>
+        <button className="nav-item" onClick={() => (window.location.href = '/marketplace')}><Store size={18} /><span>{t('nav.marketplace')}</span></button>
+        <button className="nav-item" onClick={() => (window.location.href = '/community')}><Users size={18} /><span>{t('nav.community')}</span></button>
+        {['advisor', 'admin'].includes(user?.role) && <button className="nav-item" onClick={() => (window.location.href = '/advisor')}><UserCheck size={18} /><span>{t('nav.advisor')}</span></button>}
+        <button className={itemClass('settings')} onClick={() => setActiveTab('settings')}><Settings size={18} /><span>{t('nav.settings')}</span></button>
       </nav>
 
       <div className="sidebar-quick-actions">
@@ -44,7 +51,7 @@ export const DecisionSidebar = ({ user, activeTab, setActiveTab, logout, onAddCr
           <span className="user-name">{user?.full_name}</span>
           <span className="user-email">{user?.email}</span>
         </div>
-        <button onClick={logout} className="logout-btn">Logout</button>
+        <button onClick={logout} className="logout-btn">{t('nav.logout')}</button>
       </div>
     </aside>
   );

@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Leaf, ArrowLeft, Landmark, Loader, Search, X, Clock,
+  Leaf, ArrowLeft, Landmark, Loader, Search, X,
   FileText, CheckCircle2, AlertTriangle, ChevronRight, RefreshCcw,
   Sparkles, ShieldCheck, ExternalLink,
 } from 'lucide-react';
 import ApiService from '../services/api';
+import { speakText } from '../utils/speech';
 import './GovernmentSchemes.css';
 
 /* ── i18n ───────────────────────────────────────────────── */
@@ -181,6 +182,7 @@ const GovernmentSchemes = () => {
 
   // Data
   const [schemes, setSchemes] = useState(null);
+  const [farmId, setFarmId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -190,6 +192,12 @@ const GovernmentSchemes = () => {
   const [simpleExplanations, setSimpleExplanations] = useState({});
 
   const t = T[lang];
+
+  useEffect(() => {
+    ApiService.getFarms().then((items) => {
+      setFarmId((items || [])[0]?.id || null);
+    }).catch(() => {});
+  }, []);
 
   /* ── Load schemes ─── */
   const loadSchemes = useCallback(async () => {
@@ -281,6 +289,17 @@ const GovernmentSchemes = () => {
       ? `${scheme.name} योजना में ${scheme.subsidy ? `${scheme.subsidy}%` : 'उपलब्ध'} सहायता मिल सकती है। ${(CATEGORY_META[scheme.category] || CATEGORY_META.general).labelHi} श्रेणी की योजना है। ${scheme.docsList.join(', ')} जैसे दस्तावेज़ तैयार रखें।`
       : `${scheme.name} provides ${scheme.subsidy ? `${scheme.subsidy}%` : 'available'} support under the ${(CATEGORY_META[scheme.category] || CATEGORY_META.general).label} category. Keep ${scheme.docsList.slice(0, 3).join(', ')} ready and apply through the official portal.`;
     setSimpleExplanations((p) => ({ ...p, [scheme.id]: explanation }));
+  };
+
+  const handleSaveScheme = async (scheme) => {
+    await ApiService.saveScheme(scheme.id, {
+      farm_id: farmId,
+      scheme_name: scheme.name,
+      source_url: getApplyLink(scheme),
+      summary: scheme.shortDescription,
+      eligibility_text: scheme.eligibility,
+      estimated_benefit: scheme.estimatedBenefit,
+    });
   };
 
   /* ── difficulty meta ─── */
@@ -398,6 +417,9 @@ const GovernmentSchemes = () => {
                 </button>
                 <button className="gs-refresh-btn" onClick={loadSchemes} disabled={loading}>
                   <RefreshCcw size={14} />
+                </button>
+                <button className="gs-refresh-btn" onClick={() => speakText(schemes?.summary || topSchemes.map((s) => s.name).join('. '), lang)}>
+                  🔊
                 </button>
               </div>
             </div>
@@ -621,6 +643,9 @@ const GovernmentSchemes = () => {
               </a>
               <button className="gs-prepare-btn" onClick={closePanel}>
                 <FileText size={16} /> {t.prepareDocs}
+              </button>
+              <button className="gs-prepare-btn" onClick={() => handleSaveScheme(selectedScheme)} disabled={!farmId}>
+                Save Scheme
               </button>
             </div>
           </aside>

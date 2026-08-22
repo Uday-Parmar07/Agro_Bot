@@ -58,6 +58,20 @@ class ApiService {
     return response.data;
   }
 
+  async updatePreferredLanguage(preferredLanguage) {
+    const response = await api.patch('/users/me/language', {
+      preferred_language: preferredLanguage
+    });
+    return response.data;
+  }
+
+  async transcribeVoice(blob) {
+    const formData = new FormData();
+    formData.append('audio', blob, 'voice.webm');
+    const response = await api.post('/voice/transcribe', formData);
+    return response.data;
+  }
+
   // Questionnaire endpoints
   async submitQuestionnaireSet(setNumber, answers, userId) {
     const response = await api.post('/questionnaire/submit-set', {
@@ -192,6 +206,90 @@ class ApiService {
     });
     return response.data;
   }
+
+  async getAdvisorFarmers() {
+    const response = await api.get('/advisor/farmers');
+    return response.data;
+  }
+
+  async getAdvisorFarmerSummary(farmerId) {
+    const response = await api.get(`/advisor/farmers/${farmerId}/summary`);
+    return response.data;
+  }
+
+  async saveScheme(schemeId, payload) {
+    const response = await api.post(`/schemes/${schemeId}/save`, payload);
+    return response.data;
+  }
+
+  async getSchemeRecords(farmId) {
+    const response = await api.get('/schemes/records', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
+    return response.data;
+  }
+
+  async updateSchemeRecord(recordId, payload) {
+    const response = await api.patch(`/schemes/records/${recordId}`, payload);
+    return response.data;
+  }
+
+  async createHarvestOutcome(payload) {
+    const response = await api.post('/harvest-outcomes', payload);
+    return response.data;
+  }
+
+  async getProfitability(farmId) {
+    const response = await api.get('/analytics/profitability', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
+    return response.data;
+  }
+
+  async createListing(payload) {
+    const response = await api.post('/marketplace/listings', payload);
+    return response.data;
+  }
+
+  async getListings(filters = {}) {
+    const response = await api.get('/marketplace/listings', { params: filters });
+    return response.data;
+  }
+
+  async updateListing(listingId, payload) {
+    const response = await api.patch(`/marketplace/listings/${listingId}`, payload);
+    return response.data;
+  }
+
+  async createForumPost(payload) {
+    const response = await api.post('/forum/posts', payload);
+    return response.data;
+  }
+
+  async getForumPosts(filters = {}) {
+    const response = await api.get('/forum/posts', { params: filters });
+    return response.data;
+  }
+
+  async createForumReply(postId, payload) {
+    const response = await api.post(`/forum/posts/${postId}/replies`, payload);
+    return response.data;
+  }
+
+  async reportContent(payload) {
+    const response = await api.post('/reports', payload);
+    return response.data;
+  }
+
+  async hideContent(targetType, targetId) {
+    const response = await api.post('/reports/admin/hide', null, {
+      params: { target_type: targetType, target_id: targetId }
+    });
+    return response.data;
+  }
 }
 
-export default new ApiService();
+// eslint-disable-next-line import/no-anonymous-default-export
+const apiService = new ApiService();
+
+export default apiService;

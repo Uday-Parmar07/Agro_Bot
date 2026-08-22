@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import CropMonitor from './CropMonitor';
 import WeatherWidget from './WeatherWidget';
 import AddCropModal from './AddCropModal';
@@ -38,6 +39,8 @@ const seasonFromMonth = (month) => {
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
+  const { t } = useTranslation();
+  const { updateLanguage } = useAuth();
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [farms, setFarms] = useState([]);
@@ -302,7 +305,7 @@ const Dashboard = () => {
           <div className="dashboard-title-row">
             <div>
               <h1 className="page-title">AgroBot Dashboard</h1>
-              <p className="page-subtitle">Daily farming decisions, alerts, and crop actions in one place</p>
+              <p className="page-subtitle">{t('dashboard.subtitle')}</p>
             </div>
             {farms.length > 1 && (
               <select
@@ -382,7 +385,16 @@ const Dashboard = () => {
         {activeTab === 'settings' && (
           <section className="panel settings-section">
             <h2>Settings</h2>
-            <p>Manage your account and preferences.</p>
+            <div className="setting-item">
+              <label>{t('common.language')}</label>
+              <select
+                value={user?.preferred_language || 'en'}
+                onChange={(event) => updateLanguage(event.target.value)}
+              >
+                <option value="en">{t('common.english')}</option>
+                <option value="hi">{t('common.hindi')}</option>
+              </select>
+            </div>
           </section>
         )}
 

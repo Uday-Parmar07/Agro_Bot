@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, ChevronRight, Check, Loader } from 'lucide-react';
 import ApiService from '../services/api';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import './Questionnaire.css';
 
 const Questionnaire = () => {
@@ -11,8 +12,10 @@ const Questionnaire = () => {
   const [loading, setLoading] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
   const [generatingRecommendations, setGeneratingRecommendations] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
   
   const { user, updateUser } = useAuth();
+  const voice = useVoiceRecorder();
   const navigate = useNavigate();
   const location = useLocation();
   const refillMode = new URLSearchParams(location.search).get('refill') === '1';
@@ -341,6 +344,18 @@ const Questionnaire = () => {
     }
   };
 
+  const handleVoiceForQuestion = async (questionId) => {
+    if (!voice.recording) {
+      await voice.start();
+      return;
+    }
+    const transcript = await voice.stop();
+    setVoiceTranscript(transcript);
+    if (transcript) {
+      handleAnswerChange(questionId, transcript);
+    }
+  };
+
   const isSetComplete = () => {
     const currentQuestions = questionSets[currentSet].questions;
     const currentAnswers = answers[currentSet] || {};
@@ -476,14 +491,25 @@ const Questionnaire = () => {
                   )}
 
                   {(question.type === 'text' || question.type === 'number') && (
-                    <input
-                      type={question.type}
-                      value={answers[currentSet]?.[question.id] || ''}
-                      onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                      placeholder={question.placeholder}
-                      className="question-input"
-                    />
+                    <div className="voice-input-row">
+                      <input
+                        type={question.type}
+                        value={answers[currentSet]?.[question.id] || ''}
+                        onChange={(e) => handleAnswerChange(question.id, e.target.value)}
+                        placeholder={question.placeholder}
+                        className="question-input"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => handleVoiceForQuestion(question.id)}
+                      >
+                        {voice.recording ? 'Use transcript' : 'Voice'}
+                      </button>
+                    </div>
                   )}
+                  {voice.error && <p className="voice-note">{voice.error}</p>}
+                  {voiceTranscript && <p className="voice-note">Transcript: {voiceTranscript}</p>}
                 </div>
               );
             })}
