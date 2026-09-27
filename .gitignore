@@ -225,3 +225,6 @@ agrobot-assistant/backend/experiments.ipynb
 # TypeScript incremental build info (safe even if TS added later)
 *.tsbuildinfo
 /Users/uday/Development/Agro-Bot/codex-telegram
+
+# Redesign context: screenshots are regenerable from the Playwright script
+redesign-context/**/*.png
