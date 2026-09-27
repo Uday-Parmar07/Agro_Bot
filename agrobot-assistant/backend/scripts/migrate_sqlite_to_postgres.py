@@ -15,15 +15,47 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import sys
 from typing import Iterable
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.database.schemas import Base, User, QuestionnaireResponse, Recommendation
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.database.schemas import (
+    AdvisorFarmerLink,
+    Base,
+    CropMarketNews,
+    DiseasePrediction,
+    Farm,
+    FarmCrop,
+    Mandi,
+    MandiPriceSnapshot,
+    QuestionnaireResponse,
+    Recommendation,
+    SchemeRecord,
+    User,
+    WeatherSnapshot,
+)
 
 
-TABLES_IN_COPY_ORDER = (User, QuestionnaireResponse, Recommendation)
+TABLES_IN_COPY_ORDER = (
+    User,
+    Farm,
+    QuestionnaireResponse,
+    Recommendation,
+    DiseasePrediction,
+    WeatherSnapshot,
+    FarmCrop,
+    AdvisorFarmerLink,
+    SchemeRecord,
+    Mandi,
+    MandiPriceSnapshot,
+    CropMarketNews,
+)
 
 
 def build_engine(url: str):
@@ -75,23 +107,34 @@ def reset_postgres_sequences(engine, tables: Iterable[type]) -> None:
             max_id = conn.execute(
                 text(f'SELECT COALESCE(MAX("{pk_name}"), 0) FROM "{table_name}"')
             ).scalar_one()
-            conn.execute(
-                text("SELECT setval(:sequence_name, :next_value, true)"),
-                {"sequence_name": result, "next_value": max_id},
-            )
+            if max_id:
+                conn.execute(
+                    text("SELECT setval(:sequence_name, :next_value, true)"),
+                    {"sequence_name": result, "next_value": max_id},
+                )
+            else:
+                conn.execute(
+                    text("SELECT setval(:sequence_name, 1, false)"),
+                    {"sequence_name": result},
+                )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--source",
-        default=str(Path("agrobot.db").resolve().as_uri().replace("file://", "sqlite:///")),
+        default=str((BACKEND_ROOT / "agrobot.db").resolve().as_uri().replace("file://", "sqlite:///")),
         help="Source database URL. Defaults to a local SQLite file.",
     )
     parser.add_argument(
         "--dest",
         required=True,
         help="Destination PostgreSQL URL, for example postgresql+psycopg://user:pass@host:5432/dbname?sslmode=require",
+    )
+    parser.add_argument(
+        "--reset-sequences-only",
+        action="store_true",
+        help="Only reset destination PostgreSQL sequences; do not copy data.",
     )
     return parser.parse_args()
 
@@ -103,6 +146,11 @@ def main() -> None:
     dest_engine = build_engine(args.dest)
 
     Base.metadata.create_all(bind=dest_engine)
+
+    if args.reset_sequences_only:
+        reset_postgres_sequences(dest_engine, TABLES_IN_COPY_ORDER)
+        print("Reset destination sequences")
+        return
 
     SourceSession = sessionmaker(bind=source_engine, autocommit=False, autoflush=False)
     DestSession = sessionmaker(bind=dest_engine, autocommit=False, autoflush=False)

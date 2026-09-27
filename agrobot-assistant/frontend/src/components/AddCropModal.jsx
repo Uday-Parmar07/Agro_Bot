@@ -20,7 +20,7 @@ const AddCropModal = ({ onClose, onAdd, recommendations }) => {
     setCropData({
       ...cropData,
       name: crop.crop_name,
-      variety: crop.variety
+      variety: crop.variety || ''
     });
   };
 
@@ -38,15 +38,15 @@ const AddCropModal = ({ onClose, onAdd, recommendations }) => {
           <div className="recommended-crops">
             <h3>AI Recommended Crops</h3>
             <div className="crop-suggestions">
-              {recommendations.recommended_crops.map((crop, index) => (
+              {recommendations.recommended_crops.filter((crop) => crop.overall_suitability_score === null || crop.overall_suitability_score === undefined || Number(crop.overall_suitability_score) > 0).map((crop, index) => (
                 <button
                   key={index}
                   className="crop-suggestion"
                   onClick={() => handleRecommendedCropSelect(crop)}
                 >
                   <Leaf size={16} />
-                  {crop.crop_name} - {crop.variety}
-                  <span className="score">Score: {crop.profitability_score}/10</span>
+                  {crop.crop_name}
+                  <span className="score">Suitability: {crop.suitability_band || 'insufficient data'}</span>
                 </button>
               ))}
             </div>

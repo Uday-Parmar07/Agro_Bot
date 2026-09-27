@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict
 class FarmCreate(BaseModel):
     name: str
     location: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     area_acres: Optional[float] = None
 
 
@@ -17,5 +19,7 @@ class FarmResponse(BaseModel):
     user_id: int
     name: str
     location: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     area_acres: Optional[float] = None
     created_at: datetime

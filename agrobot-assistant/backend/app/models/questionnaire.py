@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import date
 from typing import Dict, Any, Optional
 from enum import Enum
 
@@ -44,6 +45,7 @@ class SoilFertilityNutrients(BaseModel):
     npk_phosphorus: Optional[float] = None
     npk_potassium: Optional[float] = None
     soil_ph: Optional[float] = None
+    soil_test_date: Optional[date] = None
     yellowing_slow_growth: bool
     fertilizer_type: str  # "organic", "chemical", "both", "none"
 
@@ -51,15 +53,20 @@ class SoilFertilityNutrients(BaseModel):
 class MoistureIrrigation(BaseModel):
     irrigation_type: IrrigationType
     watering_frequency: str  # "daily", "weekly", "bi_weekly", "monthly", "rainfed"
+    water_availability: Optional[str] = None
 
 # Set 4: Environmental & Regional
 class EnvironmentalRegional(BaseModel):
     state: str
     district: str
-    average_rainfall: Optional[float] = None  # mm per year
+    # Legacy field name retained for stored questionnaires. Its defined meaning
+    # is annual millimetres and it is not assumed compatible with model rainfall.
+    average_rainfall: Optional[float] = None
     average_temperature: Optional[float] = None  # celsius
     total_area: float
     area_unit: AreaUnit
+    season: Optional[str] = None
+    intended_sowing_date: Optional[date] = None
 
 # Set 5: Organic Matter & Practices
 class OrganicMatterPractices(BaseModel):
@@ -67,14 +74,18 @@ class OrganicMatterPractices(BaseModel):
     organic_matter_types: Optional[list[str]] = []  # ["compost", "green_manure", "animal_dung"]
     crop_residue_practice: str  # "leave_in_field", "burn", "remove", "compost"
     earthworms_present: bool
+    previous_crop: Optional[str] = None
+    farmer_goal: Optional[str] = None
 
 class QuestionnaireSubmission(BaseModel):
     user_id: int
+    farm_id: Optional[int] = None
     set_number: int
     answers: Dict[str, Any]
 
 class CompleteQuestionnaire(BaseModel):
     user_id: int
+    farm_id: Optional[int] = None
     soil_physical: SoilPhysicalProperties
     soil_fertility: SoilFertilityNutrients
     moisture_irrigation: MoistureIrrigation

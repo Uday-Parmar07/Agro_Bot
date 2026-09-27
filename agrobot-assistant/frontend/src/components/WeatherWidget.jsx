@@ -3,7 +3,7 @@ import { Cloud, Sun, CloudRain, Wind, Eye, Gauge, Droplets, MapPin } from 'lucid
 import ApiService from '../services/api';
 import './WeatherWidget.css';
 
-const WeatherWidget = () => {
+const WeatherWidget = ({ farmId }) => {
   const [weather, setWeather] = useState({
     current: {
       temperature: 0,
@@ -12,17 +12,20 @@ const WeatherWidget = () => {
       windSpeed: 0,
       visibility: 0,
       pressure: 0,
-      location: 'Loading location...'
+      location: 'Loading location...',
+      source: 'unknown'
     },
     forecast: []
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const loadWeather = async () => {
       try {
         setLoading(true);
-        const data = await ApiService.getWeatherOverview();
+        setError(null);
+        const data = await ApiService.getWeatherOverview(farmId);
 
         const current = data.current || {};
         const forecast = (data.forecast || []).slice(0, 3).map((entry, index) => {
@@ -35,7 +38,6 @@ const WeatherWidget = () => {
           return {
             day,
             high: Math.round(entry.temperature ?? 0),
-            low: Math.max(Math.round((entry.temperature ?? 0) - 3), 0),
             condition,
             icon: condition.toLowerCase().includes('rain') ? '🌧️' : condition.toLowerCase().includes('cloud') ? '☁️' : '☀️'
           };
@@ -49,19 +51,21 @@ const WeatherWidget = () => {
             windSpeed: current.wind_speed ?? 0,
             visibility: current.visibility ?? 0,
             pressure: current.pressure ?? 0,
-            location: data.location || current.location || 'Farm Location'
+            location: data.location || current.location || 'Farm Location',
+            source: current._source || 'unknown'
           },
           forecast
         });
       } catch (error) {
         console.error('Weather load failed:', error);
+        setError('Weather is currently unavailable. No mock values are being shown.');
       } finally {
         setLoading(false);
       }
     };
 
     loadWeather();
-  }, []);
+  }, [farmId]);
 
   const getWeatherIcon = (condition) => {
     switch (condition.toLowerCase()) {
@@ -72,6 +76,15 @@ const WeatherWidget = () => {
       default: return <Sun className="weather-main-icon" />;
     }
   };
+
+  if (error && !loading) {
+    return (
+      <div className="weather-widget">
+        <div className="weather-header"><div className="header-title"><h2>Weather Conditions</h2></div></div>
+        <div className="weather-warning">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="weather-widget">
@@ -86,6 +99,7 @@ const WeatherWidget = () => {
       </div>
 
       <div className="current-weather-section">
+        {weather.current.source === 'mock_fallback' && <div className="weather-warning">Development mock weather — not live conditions</div>}
         <div className="weather-main">
           <div className="weather-icon-container">
             {getWeatherIcon(weather.current.condition)}
@@ -153,7 +167,6 @@ const WeatherWidget = () => {
               <div className="forecast-icon">{day.icon}</div>
               <div className="forecast-temps">
                 <span className="forecast-high">{day.high}°</span>
-                <span className="forecast-low">{day.low}°</span>
               </div>
             </div>
           ))}

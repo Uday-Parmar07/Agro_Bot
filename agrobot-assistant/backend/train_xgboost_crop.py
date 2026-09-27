@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -127,6 +128,12 @@ def main():
         help="Path to save evaluation metrics JSON.",
     )
     parser.add_argument(
+        "--metadata-output",
+        type=Path,
+        default=Path("artifacts/xgboost_crop_metadata.json"),
+        help="Path to save versioned inference metadata and observed feature ranges.",
+    )
+    parser.add_argument(
         "--k-max",
         type=float,
         default=120.0,
@@ -155,6 +162,7 @@ def main():
     args.cleaned_output.parent.mkdir(parents=True, exist_ok=True)
     args.model_output.parent.mkdir(parents=True, exist_ok=True)
     args.metrics_output.parent.mkdir(parents=True, exist_ok=True)
+    args.metadata_output.parent.mkdir(parents=True, exist_ok=True)
 
     cleaned_df.to_csv(args.cleaned_output, index=False)
 
@@ -172,6 +180,38 @@ def main():
         },
         args.model_output,
     )
+
+    model_sha256 = hashlib.sha256(args.model_output.read_bytes()).hexdigest()
+    metadata_payload = {
+        "metadata_version": "crop-model-metadata-v1",
+        "model_sha256": model_sha256,
+        "model_version": f"xgboost-crop-{model_sha256[:12]}",
+        "feature_columns": feature_cols,
+        "feature_ranges": {
+            column: {
+                "min": float(cleaned_df[column].min()),
+                "max": float(cleaned_df[column].max()),
+            }
+            for column in feature_cols
+        },
+        "model_classes": encoder.classes_.tolist(),
+        "training_rows": int(len(cleaned_df)),
+        "range_source": str(args.cleaned_output),
+        "feature_semantics": {
+            "rainfall": {
+                "unit": "unspecified",
+                "period": "training_dataset_unspecified",
+                "documentation_status": "not_documented_in_repository",
+            }
+        },
+        "rainfall_unit_warning": (
+            "The training dataset documents neither the rainfall unit nor its time period. "
+            "Questionnaire annual rainfall must not be passed to this feature, converted, "
+            "or compared with its range without verified provenance."
+        ),
+    }
+    with args.metadata_output.open("w", encoding="utf-8") as f:
+        json.dump(metadata_payload, f, indent=2)
 
     metrics_payload = {
         "rows_raw": int(len(raw_df)),
@@ -193,6 +233,7 @@ def main():
     print(f"Cleaned CSV      : {args.cleaned_output}")
     print(f"Model artifact   : {args.model_output}")
     print(f"Metrics artifact : {args.metrics_output}")
+    print(f"Model metadata   : {args.metadata_output}")
 
 
 if __name__ == "__main__":

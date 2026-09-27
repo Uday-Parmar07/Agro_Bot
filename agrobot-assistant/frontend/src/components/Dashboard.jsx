@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import CropMonitor from './CropMonitor';
+import MandiPriceTeaser from './MandiPriceTeaser';
 import WeatherWidget from './WeatherWidget';
 import AddCropModal from './AddCropModal';
 import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { cultivatedCropSummary, farmerSelectedCrops } from '../utils/dashboard';
 import {
   AskAgroBotFab,
   CropGrowthProgress,
@@ -31,12 +33,6 @@ const iconForCategory = (category, activity) => {
   return '✅';
 };
 
-const seasonFromMonth = (month) => {
-  if ([6, 7, 8, 9, 10].includes(month)) return 'Kharif';
-  if ([11, 12, 1, 2, 3].includes(month)) return 'Rabi';
-  return 'Zaid';
-};
-
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
@@ -53,6 +49,8 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [showAddCropModal, setShowAddCropModal] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [recommendationRefreshing, setRecommendationRefreshing] = useState(false);
+  const [recommendationError, setRecommendationError] = useState(null);
 
   useEffect(() => {
     const loadFarms = async () => {
@@ -80,24 +78,24 @@ const Dashboard = () => {
         const [recsResult, weatherResult, questionnaireResult, cropsResult] = await Promise.all([
           ApiService.getLatestRecommendations(selectedFarmId).catch(() => null),
           ApiService.getWeatherOverview(selectedFarmId).catch(() => null),
-          ApiService.getUserQuestionnaireResponses().catch(() => ({})),
+          ApiService.getUserQuestionnaireResponses(selectedFarmId).catch(() => ({})),
           ApiService.getFarmCrops(selectedFarmId).catch(() => []),
         ]);
 
         setRecommendations(recsResult);
         setWeatherOverview(weatherResult);
         setQuestionnaire(questionnaireResult || {});
-        setUserCrops((cropsResult || []).map((crop) => ({
+        setUserCrops(farmerSelectedCrops(cropsResult || []).map((crop) => ({
           id: crop.id,
           name: crop.crop_name,
-          variety: crop.variety || 'Unknown variety',
+          variety: crop.variety || 'Variety not recorded',
           area: crop.area_acres || 0,
           plantingDate: crop.planting_date,
           expectedHarvest: crop.expected_harvest_date,
-          health: 'Good',
-          moisture: weatherResult?.current?.humidity || 0,
-          temperature: weatherResult?.current?.temperature || 0,
-          status: crop.status === 'active' ? 'healthy' : crop.status,
+          health: 'Not assessed',
+          moisture: null,
+          temperature: null,
+          status: crop.status,
           lastUpdated: 'from saved record',
         })));
       } catch (loadError) {
@@ -109,6 +107,20 @@ const Dashboard = () => {
 
     loadDashboardData();
   }, [selectedFarmId]);
+
+  const handleRefreshRecommendations = async () => {
+    if (!selectedFarmId) return;
+    try {
+      setRecommendationRefreshing(true);
+      setRecommendationError(null);
+      const refreshed = await ApiService.refreshRecommendations(selectedFarmId);
+      setRecommendations(refreshed);
+    } catch (refreshError) {
+      setRecommendationError(refreshError.response?.data?.detail || 'Recommendation generation failed safely.');
+    } finally {
+      setRecommendationRefreshing(false);
+    }
+  };
 
   const handleAddCrop = async (cropData) => {
     if (!selectedFarmId) return;
@@ -126,14 +138,14 @@ const Dashboard = () => {
         {
           id: savedCrop.id,
           name: savedCrop.crop_name,
-          variety: savedCrop.variety || 'Unknown variety',
+          variety: savedCrop.variety || 'Variety not recorded',
           area: savedCrop.area_acres || 0,
           plantingDate: savedCrop.planting_date,
           expectedHarvest: savedCrop.expected_harvest_date,
-          health: 'Good',
-          moisture: weatherData.humidity || 0,
-          temperature: weatherData.temperature || 0,
-          status: 'healthy',
+          health: 'Not assessed',
+          moisture: null,
+          temperature: null,
+          status: savedCrop.status,
           lastUpdated: 'Just now',
         },
         ...prev,
@@ -156,47 +168,47 @@ const Dashboard = () => {
   const weatherData = useMemo(() => {
     const current = weatherOverview?.current || {};
     const firstForecast = (weatherOverview?.forecast || [])[0] || {};
-    const forecastDesc = `${firstForecast.description || ''}`.toLowerCase();
-    const rainProbability = forecastDesc.includes('rain') ? 70 : 20;
-    const warning = rainProbability > 60
+    const rainProbability = Number.isFinite(Number(firstForecast.rain_probability))
+      ? Number(firstForecast.rain_probability)
+      : null;
+    const warning = rainProbability !== null && rainProbability > 60
       ? 'Heavy rain expected tomorrow – delay irrigation.'
       : current.temperature > 34
-        ? 'High temperature forecast – irrigate in early morning.'
+        ? 'Current temperature is high – check field moisture before irrigating.'
         : '';
 
     return {
-      temperature: Number(current.temperature || 0),
-      windSpeed: Number(current.wind_speed || 0),
-      humidity: Number(current.humidity || 0),
+      temperature: current.temperature ?? null,
+      windSpeed: current.wind_speed ?? null,
+      humidity: current.humidity ?? null,
       rainProbability,
       warning,
+      source: current._source || 'unknown',
+      available: current.temperature !== undefined || current.humidity !== undefined,
     };
   }, [weatherOverview]);
 
   const farmSummary = useMemo(() => {
     const set1 = questionnaire?.set_1 || {};
     const set4 = questionnaire?.set_4 || {};
-    const mainCrops = (recommendations?.recommended_crops || []).slice(0, 2).map((crop) => crop.crop_name).join(', ') || 'Not available';
+    const mainCrops = cultivatedCropSummary(userCrops);
 
-    const month = new Date().getMonth() + 1;
     return {
       location: [set4?.district, set4?.state].filter(Boolean).join(', ') || 'Not available',
       soilType: set1?.soil_texture || 'Not available',
       farmSize: set4?.total_area ? `${set4.total_area} ${set4.area_unit || 'acre'}` : 'Not available',
-      season: seasonFromMonth(month),
+      season: set4?.season && set4.season !== 'not_sure' ? set4.season : 'Not specified',
       mainCrops,
     };
-  }, [questionnaire, recommendations]);
+  }, [questionnaire, userCrops]);
 
   const farmHealthScore = useMemo(() => {
-    const soil = Number(recommendations?.soil_health_score || 6.4);
-    const humidity = weatherData.humidity || 60;
-    const water = Math.max(4, 10 - Math.abs(humidity - 65) / 8);
-    const weatherRisk = weatherData.warning ? 5.8 : 8.4;
-    return (soil * 0.5) + (water * 0.25) + (weatherRisk * 0.25);
-  }, [recommendations, weatherData]);
+    const score = Number(recommendations?.soil_health_score);
+    return Number.isFinite(score) && score > 0 ? score : null;
+  }, [recommendations]);
 
   const soilStatus = useMemo(() => {
+    if (farmHealthScore === null) return 'Not assessed';
     if (farmHealthScore >= 7.5) return 'Good';
     if (farmHealthScore >= 6) return 'Attention Needed';
     return 'Critical';
@@ -219,9 +231,7 @@ const Dashboard = () => {
 
     if (calendar.length === 0) {
       return [
-        { icon: '💧', title: 'Check soil moisture', note: 'Use manual field check this morning.' },
-        { icon: '🌱', title: 'Plan sowing', note: 'Review best crop and sowing window.' },
-        { icon: '🧪', title: 'Fertilizer prep', note: 'Keep fertilizer ready for scheduled application.' },
+        { icon: 'ℹ️', title: 'No assessed tasks', note: 'Add a cultivated crop and its planting date to create a farm schedule.' },
       ];
     }
 
@@ -231,7 +241,7 @@ const Dashboard = () => {
   const alerts = useMemo(() => {
     const result = [];
 
-    if ((recommendations?.soil_health_score || 7) < 6.5) {
+    if (recommendations?.soil_health_score !== null && recommendations?.soil_health_score !== undefined && recommendations.soil_health_score < 6.5) {
       result.push({
         level: 'warning',
         title: 'Low soil health detected',
@@ -239,7 +249,7 @@ const Dashboard = () => {
       });
     }
 
-    if (weatherData.rainProbability > 60) {
+    if (weatherData.rainProbability !== null && weatherData.rainProbability > 60) {
       result.push({
         level: 'urgent',
         title: 'Rain expected tomorrow',
@@ -250,8 +260,8 @@ const Dashboard = () => {
     if (!result.length) {
       result.push({
         level: 'good',
-        title: 'Farm conditions stable',
-        description: 'No major issues detected from current data.',
+        title: 'No assessed alerts',
+        description: 'Add measured farm information to enable condition-based alerts.',
       });
     }
 
@@ -298,6 +308,7 @@ const Dashboard = () => {
         setActiveTab={setActiveTab}
         logout={logout}
         onAddCrop={() => setShowAddCropModal(true)}
+        farmId={selectedFarmId}
       />
 
       <main className="main-content">
@@ -332,12 +343,18 @@ const Dashboard = () => {
         {activeTab === 'dashboard' && (
           <>
             <TodayOnFarm items={todayItems} />
-            <StatusCards score={farmHealthScore} soilStatus={soilStatus} alertCount={alerts.length} taskCount={todayItems.length} />
+            <StatusCards
+              score={farmHealthScore}
+              soilStatus={soilStatus}
+              alertCount={alerts.filter((alert) => alert.level !== 'good').length}
+              taskCount={todayItems.length}
+              assessmentRoute={`/questionnaire?refill=1&farm_id=${selectedFarmId}&section=soil-fertility&field=soil_test_done`}
+            />
 
             <div className="decision-grid-3">
               <AlertsPanel alerts={alerts} />
               <WeatherOverview weather={weatherData} />
-              <FarmSummary summary={farmSummary} />
+              <FarmSummary summary={farmSummary} onAddCrop={() => setShowAddCropModal(true)} />
             </div>
 
             <div className="decision-grid-2">
@@ -351,7 +368,18 @@ const Dashboard = () => {
               <CropGrowthProgress stage={growthStage} />
             </div>
 
-            <CropRecommendationsGrid crops={recommendations?.recommended_crops || []} />
+            <MandiPriceTeaser
+              farmId={selectedFarmId}
+              crops={userCrops}
+              onAddCrop={() => setShowAddCropModal(true)}
+            />
+
+            <CropRecommendationsGrid
+              recommendation={recommendations}
+              refreshing={recommendationRefreshing}
+              error={recommendationError}
+              onRefresh={handleRefreshRecommendations}
+            />
             <UpcomingTasks tasks={upcomingTasks} />
             <AdvicePanels
               soilTips={recommendations?.soil_improvement_tips || []}
@@ -370,7 +398,7 @@ const Dashboard = () => {
           />
         )}
 
-        {activeTab === 'weather' && <WeatherWidget />}
+        {activeTab === 'weather' && <WeatherWidget farmId={selectedFarmId} />}
 
         {activeTab === 'insights' && (
           <>

@@ -12,6 +12,35 @@
   width: 100%;
 }
 
+.questionnaire-farm-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.questionnaire-farm-select select {
+  min-width: 180px;
+  max-width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.question-help {
+  margin: 7px 0 0;
+  color: #94a3b8;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 600px) {
+  .questionnaire-farm-select {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .progress-bar {
   width: 100%;
   height: 8px;

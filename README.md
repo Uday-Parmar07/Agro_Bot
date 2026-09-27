@@ -43,6 +43,11 @@ Agrobot is an AI-powered agricultural assistant platform designed to empower far
 2. npm install
 3.  npm start
 
+## Deployment
+
+For migrating data to Neon PostgreSQL and deploying the combined frontend/backend
+container on AWS, see [docs/neon-aws-deployment.md](docs/neon-aws-deployment.md).
+
 
 ## Usage
 
@@ -81,4 +86,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contact
 
 For questions or support, please contact me at my mail : "udayparmar21014002@gmail.com"
-

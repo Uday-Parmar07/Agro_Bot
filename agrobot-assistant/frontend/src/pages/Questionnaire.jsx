@@ -6,19 +6,32 @@ import ApiService from '../services/api';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import './Questionnaire.css';
 
+const QUESTIONNAIRE_SECTION_TO_SET = {
+  'soil-physical': 1,
+  'soil-fertility': 2,
+  irrigation: 3,
+  environment: 4,
+  practices: 5,
+};
+
 const Questionnaire = () => {
-  const [currentSet, setCurrentSet] = useState(1);
+  const location = useLocation();
+  const query = new URLSearchParams(location.search);
+  const requestedSection = query.get('section');
+  const requestedField = query.get('field');
+  const refillMode = query.get('refill') === '1';
+  const [currentSet, setCurrentSet] = useState(QUESTIONNAIRE_SECTION_TO_SET[requestedSection] || 1);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(!refillMode);
   const [generatingRecommendations, setGeneratingRecommendations] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [farms, setFarms] = useState([]);
+  const [selectedFarmId, setSelectedFarmId] = useState(null);
   
   const { user, updateUser } = useAuth();
   const voice = useVoiceRecorder();
   const navigate = useNavigate();
-  const location = useLocation();
-  const refillMode = new URLSearchParams(location.search).get('refill') === '1';
 
   useEffect(() => {
     if (!refillMode && !user?.is_new_user && user?.onboarding_completed) {
@@ -32,6 +45,45 @@ const Questionnaire = () => {
     }, 3000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    const loadFarmContext = async () => {
+      try {
+        const farmList = await ApiService.getFarms();
+        const requestedFarmId = Number(new URLSearchParams(location.search).get('farm_id'));
+        const selected = farmList.find((farm) => farm.id === requestedFarmId) || farmList[0];
+        setFarms(farmList);
+        setSelectedFarmId(selected?.id || null);
+        if (refillMode && selected?.id) {
+          const saved = await ApiService.getUserQuestionnaireResponses(selected.id);
+          const restored = {};
+          Object.entries(saved || {}).forEach(([key, value]) => {
+            restored[Number(key.replace('set_', ''))] = value;
+          });
+          setAnswers(restored);
+        }
+      } catch (error) {
+        console.error('Unable to load farm questionnaire context:', error);
+      }
+    };
+    loadFarmContext();
+  }, [location.search, refillMode]);
+
+  useEffect(() => {
+    if (requestedSection && QUESTIONNAIRE_SECTION_TO_SET[requestedSection]) {
+      setCurrentSet(QUESTIONNAIRE_SECTION_TO_SET[requestedSection]);
+    }
+  }, [requestedSection]);
+
+  useEffect(() => {
+    if (showWelcome || !requestedField) return undefined;
+    const timer = setTimeout(() => {
+      const target = document.getElementById(`question-${requestedField}`)
+        || document.querySelector(`[data-question-id="${requestedField}"] input, [data-question-id="${requestedField}"] select`);
+      target?.focus();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [showWelcome, requestedField, currentSet]);
 
   const questionSets = {
     1: {
@@ -112,6 +164,13 @@ const Questionnaire = () => {
           placeholder: 'Enter soil pH (e.g., 6.5)'
         },
         {
+          id: 'soil_test_date',
+          question: 'When was this soil test performed?',
+          type: 'date',
+          conditional: 'soil_test_done',
+          optional: true
+        },
+        {
           id: 'yellowing_slow_growth',
           question: 'Have you noticed yellowing or slow growth in crops recently?',
           type: 'radio',
@@ -159,6 +218,18 @@ const Questionnaire = () => {
             { value: 'monthly', label: 'Monthly' },
             { value: 'rainfed', label: 'Only during rain' }
           ]
+        },
+        {
+          id: 'water_availability',
+          question: 'How reliable is water availability for the intended crop?',
+          type: 'select',
+          options: [
+            { value: 'assured', label: 'Assured throughout the crop cycle' },
+            { value: 'seasonal', label: 'Seasonal' },
+            { value: 'limited', label: 'Limited' },
+            { value: 'rainfed', label: 'Rainfall only' },
+            { value: 'not_sure', label: 'Not sure' }
+          ]
         }
       ]
     },
@@ -179,15 +250,18 @@ const Questionnaire = () => {
         },
         {
           id: 'average_rainfall',
-          question: 'What is the average rainfall in your area? (mm per year)',
+          question: 'What is the average annual rainfall in your area? (millimetres per year)',
           type: 'number',
-          placeholder: 'Enter average rainfall (optional)'
+          placeholder: 'Enter average rainfall (optional)',
+          helpText: 'Used as farm context only. The current crop model dataset does not document a matching rainfall period.',
+          optional: true
         },
         {
           id: 'average_temperature',
           question: 'What is the average temperature in your area? (°C)',
           type: 'number',
-          placeholder: 'Enter average temperature (optional)'
+          placeholder: 'Enter average temperature (optional)',
+          optional: true
         },
         {
           id: 'total_area',
@@ -204,6 +278,24 @@ const Questionnaire = () => {
             { value: 'hectare', label: 'Hectare' },
             { value: 'bigha', label: 'Bigha' }
           ]
+        },
+        {
+          id: 'season',
+          question: 'Which growing season are you planning for?',
+          type: 'select',
+          options: [
+            { value: 'kharif', label: 'Kharif' },
+            { value: 'rabi', label: 'Rabi' },
+            { value: 'zaid', label: 'Zaid' },
+            { value: 'year_round', label: 'Year-round' },
+            { value: 'not_sure', label: 'Not sure' }
+          ]
+        },
+        {
+          id: 'intended_sowing_date',
+          question: 'Intended sowing date (optional)',
+          type: 'date',
+          optional: true
         }
       ]
     },
@@ -249,6 +341,25 @@ const Questionnaire = () => {
             { value: true, label: 'Yes' },
             { value: false, label: 'No' }
           ]
+        },
+        {
+          id: 'previous_crop',
+          question: 'What crop was previously grown here?',
+          type: 'text',
+          optional: true,
+          placeholder: 'Enter crop name or Not sure'
+        },
+        {
+          id: 'farmer_goal',
+          question: 'What is your main goal for the next crop?',
+          type: 'select',
+          options: [
+            { value: 'food_security', label: 'Household food security' },
+            { value: 'market_sale', label: 'Market sale' },
+            { value: 'soil_improvement', label: 'Soil improvement' },
+            { value: 'lower_water_use', label: 'Lower water use' },
+            { value: 'not_sure', label: 'Not sure' }
+          ]
         }
       ]
     }
@@ -264,6 +375,21 @@ const Questionnaire = () => {
     }));
   };
 
+  const handleFarmChange = async (farmId) => {
+    setSelectedFarmId(farmId);
+    setCurrentSet(1);
+    try {
+      const saved = await ApiService.getUserQuestionnaireResponses(farmId);
+      const restored = {};
+      Object.entries(saved || {}).forEach(([key, value]) => {
+        restored[Number(key.replace('set_', ''))] = value;
+      });
+      setAnswers(restored);
+    } catch (error) {
+      setAnswers({});
+    }
+  };
+
   const handleNext = async () => {
     setLoading(true);
     
@@ -272,7 +398,8 @@ const Questionnaire = () => {
       await ApiService.submitQuestionnaireSet(
         currentSet,
         answers[currentSet] || {},
-        user.id
+        user.id,
+        selectedFarmId
       );
 
       if (currentSet < 5) {
@@ -292,14 +419,10 @@ const Questionnaire = () => {
     try {
       setGeneratingRecommendations(true);
       
-      console.log('=== Starting questionnaire completion ===');
-      console.log('User ID:', user.id);
-      console.log('All answers:', answers);
-      
       // Complete questionnaire
-      console.log('Step 1: Completing questionnaire...');
-      const completeResponse = await ApiService.completeQuestionnaire({
+      await ApiService.completeQuestionnaire({
         user_id: user.id,
+        farm_id: selectedFarmId,
         soil_physical: answers[1] || {},
         soil_fertility: answers[2] || {},
         moisture_irrigation: answers[3] || {},
@@ -307,27 +430,21 @@ const Questionnaire = () => {
         organic_practices: answers[5] || {}
       });
       
-      console.log('✅ Questionnaire completed:', completeResponse);
-
       // Generate AI recommendations
-      console.log('Step 2: Generating AI recommendations...');
       try {
-        const recommendations = await ApiService.generateRecommendations();
-        console.log('✅ AI recommendations generated successfully:', recommendations);
+        await ApiService.generateRecommendations(selectedFarmId);
       } catch (aiError) {
         console.error('❌ AI recommendation error:', aiError);
         console.error('Error details:', aiError.response?.data);
       }
 
       // Update user state
-      console.log('Step 3: Updating user state...');
       updateUser({
         ...user,
         onboarding_completed: true,
         is_new_user: false
       });
 
-      console.log('Step 4: Navigating to dashboard...');
       navigate('/dashboard');
     } catch (error) {
       console.error('❌ Error completing questionnaire:', error);
@@ -367,7 +484,7 @@ const Questionnaire = () => {
       }
       
       // For required questions, check if answer exists
-      if (question.type === 'checkbox') {
+      if (question.type === 'checkbox' || question.optional) {
         return true; // Checkbox questions are optional
       }
       
@@ -409,6 +526,14 @@ const Questionnaire = () => {
   return (
     <div className="questionnaire-container">
       <div className="questionnaire-header">
+        {farms.length > 1 && (
+          <label className="questionnaire-farm-select">
+            Farm
+            <select value={selectedFarmId || ''} onChange={(event) => handleFarmChange(Number(event.target.value))}>
+              {farms.map((farm) => <option key={farm.id} value={farm.id}>{farm.name}</option>)}
+            </select>
+          </label>
+        )}
         <div className="progress-bar">
           <div 
             className="progress-fill" 
@@ -432,13 +557,14 @@ const Questionnaire = () => {
               if (!shouldShow) return null;
 
               return (
-                <div key={question.id} className="question-item">
+                <div key={question.id} className="question-item" data-question-id={question.id}>
                   <label className="question-label">
                     {question.question}
                   </label>
                   
                   {question.type === 'select' && (
                     <select
+                      id={`question-${question.id}`}
                       value={answers[currentSet]?.[question.id] || ''}
                       onChange={(e) => handleAnswerChange(question.id, e.target.value)}
                       className="question-select"
@@ -457,6 +583,7 @@ const Questionnaire = () => {
                       {question.options.map((option) => (
                         <label key={option.value} className="radio-option">
                           <input
+                            id={`question-${question.id}-${option.value}`}
                             type="radio"
                             name={question.id}
                             value={option.value}
@@ -490,24 +617,26 @@ const Questionnaire = () => {
                     </div>
                   )}
 
-                  {(question.type === 'text' || question.type === 'number') && (
+                  {(question.type === 'text' || question.type === 'number' || question.type === 'date') && (
                     <div className="voice-input-row">
                       <input
+                        id={`question-${question.id}`}
                         type={question.type}
                         value={answers[currentSet]?.[question.id] || ''}
                         onChange={(e) => handleAnswerChange(question.id, e.target.value)}
                         placeholder={question.placeholder}
                         className="question-input"
                       />
-                      <button
+                      {question.type !== 'date' && <button
                         type="button"
                         className="btn btn-secondary"
                         onClick={() => handleVoiceForQuestion(question.id)}
                       >
                         {voice.recording ? 'Use transcript' : 'Voice'}
-                      </button>
+                      </button>}
                     </div>
                   )}
+                  {question.helpText && <p className="question-help">{question.helpText}</p>}
                   {voice.error && <p className="voice-note">{voice.error}</p>}
                   {voiceTranscript && <p className="voice-note">Transcript: {voiceTranscript}</p>}
                 </div>
@@ -529,7 +658,7 @@ const Questionnaire = () => {
 
         <button
           onClick={handleNext}
-          disabled={!isSetComplete() || loading}
+          disabled={!selectedFarmId || !isSetComplete() || loading}
           className="btn btn-primary"
         >
           {loading ? (

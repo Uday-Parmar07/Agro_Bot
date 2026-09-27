@@ -1,7 +1,13 @@
 import asyncio
 import os
 from dotenv import load_dotenv
-from app.services.ai_service import ai_service
+from app.models.farm_context import (
+    DataSource,
+    FarmContext,
+    RainfallCompatibility,
+    RainfallPeriod,
+)
+from app.services.crop_prediction_service import crop_prediction_service
 
 load_dotenv()
 
@@ -44,11 +50,35 @@ async def test_ai():
     
     try:
         print("Testing AI service...")
-        recommendations = await ai_service.generate_farming_recommendations(user_data)
-        print("Success! Recommendations generated:")
-        print(f"Soil Health Score: {recommendations.soil_health_score}")
-        print(f"Recommended Crops: {len(recommendations.recommended_crops)}")
-        print(f"Calendar Events: {len(recommendations.farming_calendar)}")
+        context = FarmContext(
+            farm_id=1,
+            user_id=1,
+            state="Maharashtra",
+            district="Pune",
+            soil_type="loamy",
+            irrigation_method="drip",
+            nitrogen=50,
+            phosphorus=30,
+            potassium=40,
+            ph=6.5,
+            temperature=25,
+            humidity=65,
+            rainfall_value=200,
+            rainfall_period=RainfallPeriod.TRAINING_DATASET_UNSPECIFIED,
+            rainfall_compatibility=RainfallCompatibility.COMPATIBLE,
+            model_compatible_rainfall_mm=200,
+            npk_source=DataSource.LABORATORY_TEST,
+            ph_source=DataSource.LABORATORY_TEST,
+            temperature_source=DataSource.FARMER_PROVIDED,
+            humidity_source=DataSource.WEATHER_API,
+            rainfall_source=DataSource.FARMER_PROVIDED,
+            weather_source=DataSource.WEATHER_API,
+        )
+        result = await crop_prediction_service.generate_candidates(context)
+        print("Success! Model candidates generated:")
+        print(f"Status: {result.status.value}")
+        print(f"Supported classes: {result.model_supported_crop_count}")
+        print(f"Candidates: {len(result.candidates)}")
         return True
     except Exception as e:
         print(f"AI Service Error: {e}")

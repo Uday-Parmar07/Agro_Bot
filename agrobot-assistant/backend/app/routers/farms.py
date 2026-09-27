@@ -35,6 +35,8 @@ async def create_farm(
         user_id=current_user.id,
         name=farm_data.name,
         location=farm_data.location,
+        latitude=farm_data.latitude,
+        longitude=farm_data.longitude,
         area_acres=farm_data.area_acres,
     )
     db.add(farm)

@@ -7,12 +7,13 @@ import hashlib
 class WeatherService:
     def __init__(self):
         self.api_key = os.getenv('OPENWEATHER_API_KEY')
-        self.base_url = "http://api.openweathermap.org/data/2.5"
+        self.enable_mock_weather = os.getenv('ENABLE_MOCK_WEATHER', 'false').lower() in {'1', 'true', 'yes'}
+        self.base_url = "https://api.openweathermap.org/data/2.5"
     
     async def get_current_weather(self, city: str, state: str) -> Optional[Dict[str, Any]]:
         """Get current weather data for a location"""
         if not self.api_key:
-            return self._get_mock_weather_data(city, state)
+            return self._get_mock_weather_data(city, state) if self.enable_mock_weather else None
         
         try:
             query_variants = [
@@ -48,16 +49,16 @@ class WeatherService:
                         "_source": "openweather",
                     }
                 else:
-                    return self._get_mock_weather_data(city, state)
+                    return self._get_mock_weather_data(city, state) if self.enable_mock_weather else None
                     
         except Exception as e:
             print(f"Weather API error: {e}")
-            return self._get_mock_weather_data(city, state)
+            return self._get_mock_weather_data(city, state) if self.enable_mock_weather else None
     
     async def get_weather_forecast(self, city: str, state: str) -> Optional[Dict[str, Any]]:
         """Get 5-day weather forecast"""
         if not self.api_key:
-            return self._get_mock_forecast_data(city, state)
+            return self._get_mock_forecast_data(city, state) if self.enable_mock_weather else None
         
         try:
             query_variants = [
@@ -95,7 +96,8 @@ class WeatherService:
                             "date": dt_text,
                             "temperature": item["main"]["temp"],
                             "humidity": item["main"]["humidity"],
-                            "description": item["weather"][0]["description"]
+                            "description": item["weather"][0]["description"],
+                            "rain_probability": round(float(item.get("pop", 0)) * 100, 1),
                         })
                         if len(forecast) == 3:
                             break
@@ -105,11 +107,11 @@ class WeatherService:
                         "_source": "openweather",
                     }
                 else:
-                    return self._get_mock_forecast_data(city, state)
+                    return self._get_mock_forecast_data(city, state) if self.enable_mock_weather else None
                     
         except Exception as e:
             print(f"Forecast API error: {e}")
-            return self._get_mock_forecast_data(city, state)
+            return self._get_mock_forecast_data(city, state) if self.enable_mock_weather else None
     
     def _loc_seed(self, city: str, state: str) -> int:
         key = f"{city}|{state}".lower().encode("utf-8")
@@ -133,7 +135,7 @@ class WeatherService:
             "description": description,
             "visibility": 10,
             "location": f"{city}, {state}",
-            "_source": "mock",
+            "_source": "mock_fallback",
         }
     
     def _get_mock_forecast_data(self, city: str, state: str) -> Dict[str, Any]:
@@ -150,13 +152,14 @@ class WeatherService:
                 "date": f"{day.isoformat()} 12:00:00",
                 "temperature": base_temp + (offset % 3) - 1,
                 "humidity": 50 + ((seed + offset * 7) % 30),
-                "description": conditions[(seed + offset) % len(conditions)]
+                "description": conditions[(seed + offset) % len(conditions)],
+                "rain_probability": None,
             })
 
         return {
             "forecast": forecast,
             "location": f"{city}, {state}",
-            "_source": "mock",
+            "_source": "mock_fallback",
         }
 
 # Initialize weather service

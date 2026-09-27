@@ -34,10 +34,10 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, sho
             <div className="ai-suggestions">
               <h4>🤖 AI Recommended Crops for Your Farm:</h4>
               <div className="suggestion-list">
-                {recommendations.recommended_crops.slice(0, 3).map((crop, index) => (
+                {recommendations.recommended_crops.filter((crop) => crop.overall_suitability_score === null || crop.overall_suitability_score === undefined || Number(crop.overall_suitability_score) > 0).slice(0, 3).map((crop, index) => (
                   <div key={index} className="suggestion-item">
-                    <span className="crop-name">{crop.crop_name} - {crop.variety}</span>
-                    <span className="crop-score">Score: {crop.profitability_score}/10</span>
+                    <span className="crop-name">{crop.crop_name}</span>
+                    <span className="crop-score">Suitability: {crop.suitability_band || 'insufficient data'}</span>
                   </div>
                 ))}
               </div>
@@ -74,7 +74,7 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, sho
       <div className="monitor-header">
         <div className="header-left">
           <h2>Crop Health Monitor</h2>
-          <p>Real-time monitoring of {crops.length} crop{crops.length !== 1 ? 's' : ''}</p>
+          <p>Saved cultivated crops for this farm</p>
         </div>
         {showAddButton && (
           <div className="header-right">
@@ -127,7 +127,7 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, sho
                 </div>
                 <div className="metric-data">
                   <span className="metric-label">Soil Moisture</span>
-                  <span className="metric-value">{crop.moisture}%</span>
+                  <span className="metric-value">{crop.moisture === null ? 'Not assessed' : `${crop.moisture}%`}</span>
                 </div>
               </div>
 
@@ -137,7 +137,7 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, sho
                 </div>
                 <div className="metric-data">
                   <span className="metric-label">Temperature</span>
-                  <span className="metric-value">{crop.temperature}°C</span>
+                  <span className="metric-value">{crop.temperature === null ? 'Not assessed' : `${crop.temperature}°C`}</span>
                 </div>
               </div>
             </div>

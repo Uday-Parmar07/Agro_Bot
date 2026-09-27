@@ -23,9 +23,6 @@ class User(Base):
     farms = relationship('Farm', back_populates='user')
     questionnaire_responses = relationship('QuestionnaireResponse', back_populates='user')
     recommendations = relationship('Recommendation', back_populates='user')
-    marketplace_listings = relationship('MarketplaceListing', back_populates='farmer')
-    forum_posts = relationship('ForumPost', back_populates='user')
-    forum_replies = relationship('ForumReply', back_populates='user')
 
 class Farm(Base):
     __tablename__ = 'farms'
@@ -34,6 +31,8 @@ class Farm(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String, nullable=False, default='Default Farm')
     location = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     area_acres = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -75,6 +74,28 @@ class Recommendation(Base):
     pest_disease_prevention = Column(JSON, nullable=True)
     generated_at = Column(DateTime, default=datetime.utcnow)
     next_review_date = Column(String, nullable=True)  # Changed to String to avoid DateTime issues
+    status = Column(String, nullable=True)
+    input_snapshot = Column(JSON, nullable=True)
+    data_quality = Column(JSON, nullable=True)
+    model_version = Column(String, nullable=True)
+    model_supported_crop_count = Column(Integer, nullable=True)
+    crop_catalog_version = Column(String, nullable=True)
+    prompt_version = Column(String, nullable=True)
+    ranking_rule_version = Column(String, nullable=True)
+    weather_source = Column(String, nullable=True)
+    generation_mode = Column(String, nullable=True)
+    model_status = Column(String, nullable=True)
+    explanation_status = Column(String, nullable=True)
+    llm_failure_reasons = Column(JSON, nullable=True)
+    final_candidates = Column(JSON, nullable=True)
+    preliminary_candidates = Column(JSON, nullable=True)
+    global_warnings = Column(JSON, nullable=True)
+    missing_inputs = Column(JSON, nullable=True)
+    required_actions = Column(JSON, nullable=True)
+    recommendation_message = Column(String, nullable=True)
+    coverage = Column(JSON, nullable=True)
+    general_advice = Column(JSON, nullable=True)
+    disclaimer = Column(String, nullable=True)
 
     # Relationships
     user = relationship('User', back_populates='recommendations')
@@ -128,7 +149,6 @@ class FarmCrop(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     farm = relationship('Farm', back_populates='crops')
-    harvest_outcomes = relationship('HarvestOutcome', back_populates='farm_crop')
 
 class AdvisorFarmerLink(Base):
     __tablename__ = 'advisor_farmer_links'
@@ -154,73 +174,52 @@ class SchemeRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-class HarvestOutcome(Base):
-    __tablename__ = 'harvest_outcomes'
+class Mandi(Base):
+    __tablename__ = 'mandis'
+    __table_args__ = (
+        UniqueConstraint('market_name', 'state', 'district', name='uq_mandis_market_state_district'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    farm_crop_id = Column(Integer, ForeignKey('farm_crops.id'), nullable=False, index=True)
-    actual_yield = Column(Float, nullable=False)
-    unit = Column(String, nullable=False)
-    sale_price_per_unit = Column(Float, nullable=False)
-    harvested_at = Column(Date, nullable=False)
-    notes = Column(String, nullable=True)
+    market_name = Column(String, nullable=False, index=True)
+    state = Column(String, nullable=False, index=True)
+    district = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    farm_crop = relationship('FarmCrop', back_populates='harvest_outcomes')
-
-class MarketplaceListing(Base):
-    __tablename__ = 'marketplace_listings'
-
-    id = Column(Integer, primary_key=True, index=True)
-    farmer_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
-    crop_name = Column(String, nullable=False)
-    quantity = Column(Float, nullable=False)
-    unit = Column(String, nullable=False)
-    price = Column(Float, nullable=False)
-    location = Column(String, nullable=True)
-    contact_pref = Column(String, nullable=True)
-    status = Column(String, nullable=False, default='active')
-    hidden = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    farmer = relationship('User', back_populates='marketplace_listings')
-
-class ForumPost(Base):
-    __tablename__ = 'forum_posts'
+class MandiPriceSnapshot(Base):
+    __tablename__ = 'mandi_price_snapshots'
+    __table_args__ = (
+        UniqueConstraint('commodity', 'market_name', 'price_date', name='uq_mandi_price_commodity_market_date'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
-    region = Column(String, nullable=False, index=True)
-    crop_tag = Column(String, nullable=True)
-    title = Column(String, nullable=False)
-    body = Column(String, nullable=False)
-    hidden = Column(Boolean, nullable=False, default=False)
+    commodity = Column(String, nullable=False, index=True)
+    market_name = Column(String, nullable=False, index=True)
+    state = Column(String, nullable=True)
+    district = Column(String, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    min_price = Column(Float, nullable=True)
+    max_price = Column(Float, nullable=True)
+    modal_price = Column(Float, nullable=True)
+    arrival_qty = Column(Float, nullable=True)
+    price_date = Column(Date, nullable=False, index=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship('User', back_populates='forum_posts')
-    replies = relationship('ForumReply', back_populates='post')
-
-class ForumReply(Base):
-    __tablename__ = 'forum_replies'
-
-    id = Column(Integer, primary_key=True, index=True)
-    post_id = Column(Integer, ForeignKey('forum_posts.id'), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
-    body = Column(String, nullable=False)
-    hidden = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    post = relationship('ForumPost', back_populates='replies')
-    user = relationship('User', back_populates='forum_replies')
-
-class Report(Base):
-    __tablename__ = 'reports'
+class CropMarketNews(Base):
+    __tablename__ = 'crop_market_news'
+    __table_args__ = (
+        UniqueConstraint('crop', 'cached_for_date', 'headline', name='uq_crop_market_news_crop_date_headline'),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    target_type = Column(String, nullable=False)
-    target_id = Column(Integer, nullable=False)
-    reported_by = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
-    reason = Column(String, nullable=False)
-    status = Column(String, nullable=False, default='open')
+    crop = Column(String, nullable=False, index=True)
+    headline = Column(String, nullable=False)
+    summary = Column(String, nullable=False)
+    source_url = Column(String, nullable=True)
+    published_or_found_at = Column(DateTime, nullable=True)
+    cached_for_date = Column(Date, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)

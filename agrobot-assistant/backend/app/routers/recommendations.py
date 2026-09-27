@@ -1,324 +1,481 @@
+import logging
+from datetime import date, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.models.recommendation import AIRecommendationResponse, CropRecommendation, CalendarEvent
+
 from app.database.connection import get_db
-from app.database.schemas import User, QuestionnaireResponse, Recommendation
-from app.utils.auth_utils import get_current_user
-from app.services.ai_service import ai_service
+from app.database.schemas import QuestionnaireResponse, Recommendation, User
+from app.models.recommendation import (
+    AIRecommendationResponse,
+    CalendarEvent,
+    CropRecommendation,
+    RecommendationCoverage,
+    RecommendationStatus,
+)
+from app.services.crop_recommendation_service import crop_recommendation_service
+from app.services.crop_ranking_service import RANKING_CONFIG
+from app.services.farm_service import get_existing_user_farm
 from app.services.government_api_service import generate_government_schemes
-from app.services.farm_service import get_user_farm
-from datetime import datetime, date
-import logging
-import traceback
+from app.utils.auth_utils import get_current_user
 
-# Enhanced logging
-logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 
-def _serialize_recommendation_payload(recommendations: AIRecommendationResponse):
-    farming_calendar_serializable = []
-    for event in recommendations.farming_calendar:
-        event_dict = event.dict()
-        if isinstance(event_dict['date'], date):
-            event_dict['date'] = event_dict['date'].isoformat()
-        farming_calendar_serializable.append(event_dict)
-
-    recommended_crops_serializable = []
-    for crop in recommendations.recommended_crops:
-        recommended_crops_serializable.append(crop.dict())
-
-    return recommended_crops_serializable, farming_calendar_serializable
-
-
-def _save_recommendation(db: Session, user_id: int, farm_id: int, recommendations: AIRecommendationResponse) -> Recommendation:
-    recommended_crops_serializable, farming_calendar_serializable = _serialize_recommendation_payload(recommendations)
-
-    db_recommendation = Recommendation(
+def _save_recommendation(
+    db: Session,
+    user_id: int,
+    farm_id: int,
+    recommendation: AIRecommendationResponse,
+) -> Recommendation:
+    payload = recommendation.model_dump(mode="json")
+    record = Recommendation(
         user_id=user_id,
         farm_id=farm_id,
-        soil_health_score=recommendations.soil_health_score,
-        recommended_crops=recommended_crops_serializable,
-        farming_calendar=farming_calendar_serializable,
-        soil_improvement_tips=recommendations.soil_improvement_tips,
-        irrigation_recommendations=recommendations.irrigation_recommendations,
-        fertilizer_recommendations=recommendations.fertilizer_recommendations,
-        pest_disease_prevention=recommendations.pest_disease_prevention,
-        next_review_date=recommendations.next_review_date.isoformat() if recommendations.next_review_date else None
+        soil_health_score=recommendation.soil_health_score,
+        recommended_crops=payload["recommended_crops"],
+        farming_calendar=payload["farming_calendar"],
+        soil_improvement_tips=payload["soil_improvement_tips"],
+        irrigation_recommendations=payload["irrigation_recommendations"],
+        fertilizer_recommendations=payload["fertilizer_recommendations"],
+        pest_disease_prevention=payload["pest_disease_prevention"],
+        next_review_date=(recommendation.next_review_date.isoformat() if recommendation.next_review_date else None),
+        status=recommendation.status.value,
+        input_snapshot=payload["input_snapshot"],
+        data_quality=payload.get("data_quality"),
+        model_version=recommendation.model_version,
+        model_supported_crop_count=(
+            recommendation.coverage.model_supported_crop_count if recommendation.coverage else None
+        ),
+        crop_catalog_version=recommendation.crop_catalog_version,
+        prompt_version=recommendation.prompt_version,
+        ranking_rule_version=recommendation.ranking_rule_version,
+        weather_source=recommendation.weather_source,
+        generation_mode=recommendation.generation_mode,
+        model_status=recommendation.model_status,
+        explanation_status=recommendation.explanation_status,
+        llm_failure_reasons=recommendation.internal_llm_reason_codes,
+        final_candidates=payload["recommended_crops"],
+        preliminary_candidates=payload["preliminary_crops"],
+        global_warnings=payload["global_warnings"],
+        missing_inputs=payload["missing_inputs"],
+        required_actions=payload["required_actions"],
+        recommendation_message=recommendation.message,
+        coverage=payload.get("coverage"),
+        general_advice=payload.get("general_advice", []),
+        disclaimer=recommendation.disclaimer,
     )
-
-    db.add(db_recommendation)
+    db.add(record)
     db.commit()
-    db.refresh(db_recommendation)
-    return db_recommendation
+    db.refresh(record)
+    return record
 
 
-def _db_to_response_model(latest_recommendation: Recommendation) -> AIRecommendationResponse:
-    farming_calendar = []
-    for event in latest_recommendation.farming_calendar:
-        event_copy = event.copy()
-        if isinstance(event_copy['date'], str):
-            try:
-                event_copy['date'] = datetime.strptime(event_copy['date'], '%Y-%m-%d').date()
-            except ValueError:
-                pass
-        farming_calendar.append(CalendarEvent(**event_copy))
+def _parse_date(value):
+    if isinstance(value, date):
+        return value
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value))
+    except ValueError:
+        return None
 
-    next_review_date = None
-    if latest_recommendation.next_review_date:
-        try:
-            next_review_date = datetime.strptime(latest_recommendation.next_review_date, '%Y-%m-%d').date()
-        except ValueError:
-            next_review_date = None
 
+def _db_to_response_model(record: Recommendation, is_stale: bool = False) -> AIRecommendationResponse:
+    legacy_global_warnings = {}
+    snapshot = record.input_snapshot or {}
+    legacy_model_warnings = snapshot.get("model_warnings", []) if isinstance(snapshot, dict) else []
+    legacy_rainfall_model_input = (
+        isinstance(snapshot, dict)
+        and "rainfall_semantics" not in snapshot
+        and any(
+            "rainfall" in str(warning.get("message", "")).lower()
+            for warning in legacy_model_warnings
+            if isinstance(warning, dict)
+        )
+    )
+
+    def normalize_global_warning(warning, index=0):
+        data = warning if isinstance(warning, dict) else {
+            "code": f"LEGACY_WARNING_{index}",
+            "message": str(warning),
+        }
+        code = str(data.get("code") or f"LEGACY_WARNING_{index}")
+        message = str(data.get("message") or "")
+        if code in {"ESTIMATED_PH", "ESTIMATED_NPK"} or (
+            "npk" in message.lower() and "estimated" in message.lower()
+        ):
+            return {
+                "code": "ESTIMATED_SOIL_VALUES",
+                "message": "NPK or pH values were estimated because complete soil-test values were not provided.",
+            }
+        if "rainfall" in message.lower() or code == "RAINFALL_PERIOD_UNCERTAIN":
+            return {
+                "code": "RAINFALL_PERIOD_INCOMPATIBLE",
+                "message": (
+                    "The rainfall information provided cannot currently be compared reliably "
+                    "with the model's training data."
+                ),
+            }
+        if code == "MODEL_INPUT_OUT_OF_RANGE":
+            return {
+                "code": code,
+                "message": "One or more supplied values are outside the model's observed training data.",
+            }
+        if code == "OUT_OF_DISTRIBUTION_MODEL_INPUT":
+            return {
+                "code": code,
+                "message": "Some available farm information is outside the model's observed training data.",
+            }
+        if code == "SOWING_DATE_UNKNOWN":
+            return {
+                "code": "SOWING_DATE_MISSING",
+                "message": "Add the intended sowing date to check the crop's sowing window.",
+            }
+        if code == "MISSING_PREVIOUS_CROP":
+            return {
+                "code": code,
+                "message": "Previous crop information is missing, so crop rotation could not be evaluated.",
+            }
+        return {"code": code, "message": message}
+
+    legacy_global_codes = {
+        "ESTIMATED_PH",
+        "ESTIMATED_NPK",
+        "MOCK_WEATHER",
+        "SOWING_DATE_UNKNOWN",
+        "OUT_OF_DISTRIBUTION_MODEL_INPUT",
+        "LOW_MODEL_CONFIDENCE",
+        "RAINFALL_PERIOD_UNCERTAIN",
+        "MODEL_INPUT_OUT_OF_RANGE",
+        "ESTIMATED_SOIL_VALUES",
+        "SOWING_DATE_MISSING",
+        "MISSING_PREVIOUS_CROP",
+    }
+
+    def parse_crops(raw_items, force_preliminary=False):
+        recommended = []
+        preliminary = []
+        for raw in raw_items or []:
+            data = dict(raw)
+            # Never revive an explicitly non-positive historical score as a
+            # recommendation. Other missing legacy fields remain unknown.
+            score = data.get("overall_suitability_score")
+            if isinstance(score, (int, float)) and score < RANKING_CONFIG.minimum_preliminary_score:
+                continue
+            data.setdefault("candidate_sources", [])
+            data.setdefault("suitability_band", "insufficient_data")
+            data.setdefault("validation_coverage", {})
+            data.setdefault("validation_coverage_summary", {})
+            crop_warnings = []
+            for index, warning in enumerate(data.get("crop_specific_warnings") or data.get("warnings") or []):
+                normalized = normalize_global_warning(warning, index)
+                if normalized["code"] in legacy_global_codes or normalized["code"] == "RAINFALL_PERIOD_INCOMPATIBLE":
+                    legacy_global_warnings[normalized["code"]] = normalized
+                elif normalized["code"] not in {
+                    "INCOMPLETE_AGRONOMIC_PROFILE",
+                    "REGIONAL_COVERAGE_INCOMPLETE",
+                    "ROTATION_RULE_UNAVAILABLE",
+                    "GOAL_MAPPING_UNAVAILABLE",
+                }:
+                    crop_warnings.append(normalized)
+            data["crop_specific_warnings"] = crop_warnings
+            data["warnings"] = []
+            sources = set(data.get("candidate_sources") or [])
+            if (
+                legacy_rainfall_model_input
+                and "xgboost" in sources
+                and "knowledge_base" not in sources
+            ):
+                continue
+            summary = data.get("validation_coverage_summary") or {}
+            verified_checks = int(summary.get("verified_checks") or 0)
+            explicit_status = data.get("recommendation_status")
+            should_be_preliminary = force_preliminary or (
+                isinstance(score, (int, float))
+                and (
+                    score < RANKING_CONFIG.minimum_recommendation_score
+                    or verified_checks < RANKING_CONFIG.minimum_verified_checks_for_recommendation
+                    or explicit_status != "recommended"
+                )
+            )
+            if should_be_preliminary:
+                data["recommendation_status"] = "preliminary"
+                preliminary.append(CropRecommendation(**data))
+            else:
+                data.setdefault("recommendation_status", "insufficient_support")
+                recommended.append(CropRecommendation(**data))
+        return recommended, preliminary
+
+    crops, migrated_preliminary = parse_crops(
+        record.final_candidates or record.recommended_crops or []
+    )
+    _, stored_preliminary = parse_crops(record.preliminary_candidates or [], force_preliminary=True)
+    preliminary_crops = [*migrated_preliminary, *stored_preliminary]
+
+    calendar = []
+    for raw in record.farming_calendar or []:
+        data = dict(raw)
+        parsed = _parse_date(data.get("date"))
+        if parsed:
+            data["date"] = parsed
+            calendar.append(CalendarEvent(**data))
+
+    coverage_payload = record.coverage
+    if not coverage_payload and record.model_supported_crop_count is not None:
+        coverage_payload = {
+            "model_supported_crop_count": record.model_supported_crop_count,
+            "knowledge_base_crop_count": 0,
+            "limitation": "Legacy coverage metadata is incomplete.",
+        }
+    response_status = record.status or RecommendationStatus.SUCCESS.value
+    if not crops and preliminary_crops:
+        response_status = RecommendationStatus.PRELIMINARY.value
+    if not crops and not preliminary_crops and response_status in {
+        RecommendationStatus.SUCCESS.value,
+        RecommendationStatus.PRELIMINARY.value,
+    }:
+        response_status = RecommendationStatus.NO_RELIABLE_RECOMMENDATION.value
+    response_message = record.recommendation_message
+    if response_status == RecommendationStatus.NO_RELIABLE_RECOMMENDATION.value and not response_message:
+        response_message = (
+            "AgroBot could not find a sufficiently supported crop recommendation "
+            "from the available information."
+        )
+    raw_quality = dict(record.data_quality or {}) if record.data_quality else None
+    if raw_quality and raw_quality.get("warnings"):
+        normalized_quality_warnings = []
+        for index, warning in enumerate(raw_quality["warnings"]):
+            normalized = normalize_global_warning(warning, index)
+            legacy_global_warnings[normalized["code"]] = normalized
+            normalized_quality_warnings.append(normalized)
+        raw_quality["warnings"] = normalized_quality_warnings
+    stored_global_warnings = {
+        warning.get("code") or warning.get("message"): warning
+        for warning in (record.global_warnings or [])
+        if isinstance(warning, dict)
+    }
+    stored_global_warnings.update(legacy_global_warnings)
+    missing_inputs_payload = list(record.missing_inputs or [])
+    warning_codes = set(stored_global_warnings)
+    questionnaire_base = f"/questionnaire?refill=1&farm_id={record.farm_id}"
+    if not any(item.get("field") == "intended_sowing_date" for item in missing_inputs_payload) and (
+        "SOWING_DATE_MISSING" in warning_codes
+    ):
+        missing_inputs_payload.append(
+            {
+                "field": "intended_sowing_date",
+                "importance": "high",
+                "reason": "Needed to evaluate the sowing window.",
+                "action_route": f"{questionnaire_base}&section=environment&field=intended_sowing_date",
+                "questionnaire_section": "environment",
+            }
+        )
+    if not any(item.get("field") == "soil_test" for item in missing_inputs_payload) and (
+        "ESTIMATED_SOIL_VALUES" in warning_codes
+    ):
+        missing_inputs_payload.append(
+            {
+                "field": "soil_test",
+                "importance": "high",
+                "reason": "NPK and pH are currently estimated.",
+                "action_route": f"{questionnaire_base}&section=soil-fertility&field=soil_test_done",
+                "questionnaire_section": "soil-fertility",
+            }
+        )
     return AIRecommendationResponse(
-        user_id=latest_recommendation.user_id,
-        soil_health_score=latest_recommendation.soil_health_score,
-        recommended_crops=[
-            CropRecommendation(**crop) for crop in latest_recommendation.recommended_crops
-        ],
-        farming_calendar=farming_calendar,
-        soil_improvement_tips=latest_recommendation.soil_improvement_tips,
-        irrigation_recommendations=latest_recommendation.irrigation_recommendations,
-        fertilizer_recommendations=latest_recommendation.fertilizer_recommendations,
-        pest_disease_prevention=latest_recommendation.pest_disease_prevention,
-        generated_at=latest_recommendation.generated_at,
-        next_review_date=next_review_date
+        user_id=record.user_id,
+        farm_id=record.farm_id,
+        status=response_status,
+        coverage=RecommendationCoverage(**coverage_payload) if coverage_payload else None,
+        data_quality=raw_quality,
+        generation_mode=record.generation_mode or "unknown",
+        model_version=record.model_version or "unknown",
+        crop_catalog_version=record.crop_catalog_version or "unknown",
+        prompt_version=record.prompt_version or "unknown",
+        ranking_rule_version=record.ranking_rule_version or "unknown",
+        weather_source=record.weather_source or "unknown",
+        model_status=record.model_status or "unknown",
+        explanation_status=record.explanation_status or "unknown",
+        is_stale=is_stale,
+        message=response_message,
+        required_actions=record.required_actions or [item["reason"] for item in missing_inputs_payload],
+        missing_inputs=missing_inputs_payload,
+        global_warnings=list(stored_global_warnings.values()),
+        recommended_crops=crops,
+        preliminary_crops=preliminary_crops,
+        general_advice=record.general_advice or [],
+        disclaimer=record.disclaimer,
+        soil_health_score=record.soil_health_score,
+        farming_calendar=calendar,
+        soil_improvement_tips=record.soil_improvement_tips or [],
+        irrigation_recommendations=record.irrigation_recommendations or [],
+        fertilizer_recommendations=record.fertilizer_recommendations or [],
+        pest_disease_prevention=record.pest_disease_prevention or [],
+        generated_at=record.generated_at,
+        next_review_date=_parse_date(record.next_review_date),
+        input_snapshot=record.input_snapshot or {},
     )
 
 
-def _build_user_profile_from_responses(responses):
-    """Flatten questionnaire sets into a profile for scheme generation."""
-    sets = {resp.set_number: resp.answers for resp in responses}
-    env = sets.get(4, {})
-    irr = sets.get(3, {})
-    soil = sets.get(1, {})
-
-    acreage = None
-    if env.get("total_area"):
-        unit = env.get("area_unit") or "acre"
-        acreage = f"{env['total_area']} {unit}"
-
-    profile = {
-        "location": env.get("state") or env.get("district") or "India",
-        "state": env.get("state"),
-        "district": env.get("district"),
-        "acreage": acreage,
-        "irrigation": irr.get("irrigation_type"),
-        "soil_type": soil.get("soil_texture"),
-        "average_rainfall": env.get("average_rainfall"),
-        "average_temperature": env.get("average_temperature"),
+def _questionnaire_user_data(current_user: User, responses: list[QuestionnaireResponse]) -> dict:
+    user_data = {
+        "user_id": current_user.id,
+        "preferred_language": current_user.preferred_language,
     }
-    return profile
+    for response in responses:
+        user_data[f"set_{response.set_number}"] = response.answers
+    return user_data
+
 
 @router.post("/generate", response_model=AIRecommendationResponse)
 async def generate_recommendations(
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Generate AI recommendations based on user's questionnaire responses"""
-    
-    try:
-        logger.info(f"🚀 Starting recommendation generation for user {current_user.id}")
-        logger.info(f"👤 User: {current_user.email}, onboarding: {current_user.onboarding_completed}")
-        
-        # Check if user has completed questionnaire
-        if not current_user.onboarding_completed:
-            logger.error(f"❌ User {current_user.id} has not completed onboarding")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Please complete the questionnaire first"
-            )
-        
-        farm = get_user_farm(db, current_user, farm_id)
-        db.commit()
-
-        # Get all questionnaire responses for the user
-        logger.info(f"📋 Fetching questionnaire responses for user {current_user.id}")
-        responses = db.query(QuestionnaireResponse).filter(
+    if not current_user.onboarding_completed:
+        raise HTTPException(status_code=400, detail="Please complete the questionnaire first")
+    farm = get_existing_user_farm(db, current_user, farm_id)
+    responses = (
+        db.query(QuestionnaireResponse)
+        .filter(
             QuestionnaireResponse.user_id == current_user.id,
-            QuestionnaireResponse.farm_id == farm.id
-        ).all()
-        
-        logger.info(f"📊 Found {len(responses)} questionnaire responses")
-        
-        if len(responses) < 5:
-            logger.error(f"❌ Incomplete questionnaire data: only {len(responses)} responses")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Incomplete questionnaire data. Found {len(responses)} sets, need 5."
-            )
-        
-        # Prepare user data for AI service
-        user_data = {"user_id": current_user.id, "preferred_language": current_user.preferred_language}
-        for response in responses:
-            user_data[f"set_{response.set_number}"] = response.answers
-            logger.info(f"✅ Set {response.set_number} loaded: {list(response.answers.keys())}")
-        
-        # Generate recommendations using AI service
-        logger.info("🤖 Calling AI service...")
-        recommendations = await ai_service.generate_farming_recommendations(user_data)
-        logger.info(f"✅ AI service returned recommendations with {len(recommendations.recommended_crops)} crops")
-        
-        # Save recommendations to database
-        logger.info("💾 Saving recommendations to database...")
-        try:
-            db_recommendation = _save_recommendation(db, current_user.id, farm.id, recommendations)
-            logger.info(f"🔄 Saved recommendation - DB ID: {db_recommendation.id}")
-
-        except Exception as db_error:
-            logger.error(f"❌ Database save error: {type(db_error).__name__}: {db_error}")
-            logger.error(f"🔍 DB Error traceback: {traceback.format_exc()}")
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Database error: {str(db_error)}"
-            )
-        
-        logger.info("✅ Recommendations generated and saved successfully")
-        return recommendations
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"❌ Unexpected error: {type(e).__name__}: {e}")
-        logger.error(f"🔍 Full traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal server error: {str(e)}"
+            QuestionnaireResponse.farm_id == farm.id,
         )
+        .all()
+    )
+    present_sets = {response.set_number for response in responses}
+    if not set(range(1, 6)).issubset(present_sets):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Incomplete questionnaire data. Found sets {sorted(present_sets)}, need sets 1-5.",
+        )
+    try:
+        recommendation = await crop_recommendation_service.generate(
+            db,
+            farm.id,
+            current_user.id,
+            _questionnaire_user_data(current_user, responses),
+            current_user.preferred_language,
+        )
+        _save_recommendation(db, current_user.id, farm.id, recommendation)
+        return recommendation
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Safe crop recommendation generation failed")
+        raise HTTPException(status_code=500, detail="Recommendation generation failed safely") from exc
+
+
+@router.post("/refresh", response_model=AIRecommendationResponse)
+async def refresh_recommendations(
+    farm_id: int | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return await generate_recommendations(farm_id, current_user, db)
+
 
 @router.get("/latest", response_model=AIRecommendationResponse)
 async def get_latest_recommendations(
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Get the latest recommendations for the current user"""
-    
-    logger.info(f"📊 Fetching latest recommendations for user {current_user.id}")
-    
-    farm = get_user_farm(db, current_user, farm_id)
-    db.commit()
-
-    latest_recommendation = db.query(Recommendation).filter(
-        Recommendation.user_id == current_user.id,
-        Recommendation.farm_id == farm.id
-    ).order_by(Recommendation.generated_at.desc()).first()
-
-    responses = db.query(QuestionnaireResponse).filter(
-        QuestionnaireResponse.user_id == current_user.id,
-        QuestionnaireResponse.farm_id == farm.id
-    ).all()
-
-    latest_questionnaire_update = max((resp.updated_at for resp in responses), default=None)
-
-    if latest_recommendation and latest_questionnaire_update and latest_recommendation.generated_at < latest_questionnaire_update:
-        logger.info("🔄 Recommendation is stale for user %s. Regenerating from latest questionnaire data.", current_user.id)
-        try:
-            user_data = {"user_id": current_user.id, "preferred_language": current_user.preferred_language}
-            for response in responses:
-                user_data[f"set_{response.set_number}"] = response.answers
-
-            regenerated = await ai_service.generate_farming_recommendations(user_data)
-            latest_recommendation = _save_recommendation(db, current_user.id, farm.id, regenerated)
-            logger.info("✅ Regenerated recommendation ID %s", latest_recommendation.id)
-        except Exception as e:
-            logger.error("❌ Failed to regenerate stale recommendation: %s", e)
-            logger.error(traceback.format_exc())
-    
-    if not latest_recommendation:
-        logger.warning(f"❌ No recommendations found for user {current_user.id}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No recommendations found. Please generate recommendations first."
+    farm = get_existing_user_farm(db, current_user, farm_id)
+    latest = (
+        db.query(Recommendation)
+        .filter(Recommendation.user_id == current_user.id, Recommendation.farm_id == farm.id)
+        .order_by(Recommendation.generated_at.desc())
+        .first()
+    )
+    if not latest:
+        raise HTTPException(status_code=404, detail="No recommendations found. Generate recommendations first.")
+    responses = (
+        db.query(QuestionnaireResponse)
+        .filter(
+            QuestionnaireResponse.user_id == current_user.id,
+            QuestionnaireResponse.farm_id == farm.id,
         )
-    
-    logger.info(f"✅ Found recommendation ID {latest_recommendation.id}")
-    
-    try:
-        recommendations = _db_to_response_model(latest_recommendation)
-        logger.info("✅ Successfully converted DB model to response")
-        return recommendations
+        .all()
+    )
+    latest_questionnaire_update = max((item.updated_at for item in responses), default=None)
+    is_stale = bool(latest_questionnaire_update and latest.generated_at < latest_questionnaire_update)
+    return _db_to_response_model(latest, is_stale=is_stale)
 
-    except Exception as e:
-        logger.error(f"❌ Error converting DB model: {type(e).__name__}: {e}")
-        logger.error(f"🔍 Conversion traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing recommendations: {str(e)}"
-        )
+
+def _build_user_profile_from_responses(responses):
+    sets = {response.set_number: response.answers for response in responses}
+    environment, irrigation, soil = sets.get(4, {}), sets.get(3, {}), sets.get(1, {})
+    acreage = None
+    if environment.get("total_area"):
+        acreage = f"{environment['total_area']} {environment.get('area_unit') or 'acre'}"
+    return {
+        "location": environment.get("state") or environment.get("district") or "India",
+        "state": environment.get("state"),
+        "district": environment.get("district"),
+        "acreage": acreage,
+        "irrigation": irrigation.get("irrigation_type"),
+        "soil_type": soil.get("soil_texture"),
+        "average_rainfall": environment.get("average_rainfall"),
+        "average_temperature": environment.get("average_temperature"),
+    }
 
 
 @router.get("/government-schemes")
 async def get_government_schemes(
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Generate government scheme suggestions using questionnaire data."""
-    farm = get_user_farm(db, current_user, farm_id)
-    db.commit()
-
-    responses = db.query(QuestionnaireResponse).filter(
-        QuestionnaireResponse.user_id == current_user.id,
-        QuestionnaireResponse.farm_id == farm.id
-    ).all()
-
-    if not responses:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No questionnaire data found. Please complete the questionnaire first."
+    farm = get_existing_user_farm(db, current_user, farm_id)
+    responses = (
+        db.query(QuestionnaireResponse)
+        .filter(
+            QuestionnaireResponse.user_id == current_user.id,
+            QuestionnaireResponse.farm_id == farm.id,
         )
-
+        .all()
+    )
+    if not responses:
+        raise HTTPException(status_code=400, detail="No questionnaire data found.")
     profile = _build_user_profile_from_responses(responses)
     profile["preferred_language"] = current_user.preferred_language
+    return generate_government_schemes(profile)
 
-    try:
-        result = generate_government_schemes(profile)
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Government schemes generation failed: {e}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate government schemes"
-        )
 
 @router.get("/history")
 async def get_recommendation_history(
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Get recommendation history for the current user"""
-    
-    logger.info(f"📈 Fetching recommendation history for user {current_user.id}")
-    
-    farm = get_user_farm(db, current_user, farm_id)
-    db.commit()
-
-    recommendations = db.query(Recommendation).filter(
-        Recommendation.user_id == current_user.id,
-        Recommendation.farm_id == farm.id
-    ).order_by(Recommendation.generated_at.desc()).all()
-    
-    logger.info(f"📊 Found {len(recommendations)} historical recommendations")
-    
+    farm = get_existing_user_farm(db, current_user, farm_id)
+    records = (
+        db.query(Recommendation)
+        .filter(Recommendation.user_id == current_user.id, Recommendation.farm_id == farm.id)
+        .order_by(Recommendation.generated_at.desc())
+        .all()
+    )
     return [
         {
-            "id": rec.id,
-            "soil_health_score": rec.soil_health_score,
-            "generated_at": rec.generated_at,
-            "next_review_date": rec.next_review_date,
-            "crops_count": len(rec.recommended_crops) if rec.recommended_crops else 0,
-            "calendar_events_count": len(rec.farming_calendar) if rec.farming_calendar else 0
+            "id": record.id,
+            "status": record.status or "unknown",
+            "generation_mode": record.generation_mode or "unknown",
+            "model_version": record.model_version or "unknown",
+            "soil_health_score": record.soil_health_score,
+            "generated_at": record.generated_at,
+            "next_review_date": record.next_review_date,
+            "crops_count": len(
+                (record.final_candidates or record.recommended_crops or [])
+                + (record.preliminary_candidates or [])
+            ),
+            "calendar_events_count": len(record.farming_calendar or []),
         }
-        for rec in recommendations
+        for record in records
     ]

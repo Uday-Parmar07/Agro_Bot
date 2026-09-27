@@ -224,3 +224,4 @@ agrobot-assistant/backend/experiments.ipynb
 
 # TypeScript incremental build info (safe even if TS added later)
 *.tsbuildinfo
+/Users/uday/Development/Agro-Bot/codex-telegram

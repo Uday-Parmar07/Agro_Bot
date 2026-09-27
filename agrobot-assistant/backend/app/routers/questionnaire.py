@@ -4,7 +4,7 @@ from app.models.questionnaire import QuestionnaireSubmission, CompleteQuestionna
 from app.models.user import UserResponse
 from app.database.connection import get_db
 from app.database.schemas import User, QuestionnaireResponse
-from app.services.farm_service import get_or_create_default_farm
+from app.services.farm_service import get_existing_user_farm, get_user_farm
 from app.utils.auth_utils import get_current_user
 from typing import Dict, Any
 
@@ -23,7 +23,7 @@ async def submit_questionnaire_set(
             detail="Not authorized to submit for this user"
         )
     
-    farm = get_or_create_default_farm(db, current_user)
+    farm = get_user_farm(db, current_user, submission.farm_id)
 
     # Save or update questionnaire response
     existing_response = db.query(QuestionnaireResponse).filter(
@@ -60,15 +60,15 @@ async def complete_questionnaire(
             detail="Not authorized"
         )
     
-    farm = get_or_create_default_farm(db, current_user)
+    farm = get_user_farm(db, current_user, questionnaire.farm_id)
 
     # Save all questionnaire data
     questionnaire_data = {
-        1: questionnaire.soil_physical.dict(),
-        2: questionnaire.soil_fertility.dict(),
-        3: questionnaire.moisture_irrigation.dict(),
-        4: questionnaire.environmental.dict(),
-        5: questionnaire.organic_practices.dict()
+        1: questionnaire.soil_physical.model_dump(mode="json"),
+        2: questionnaire.soil_fertility.model_dump(mode="json"),
+        3: questionnaire.moisture_irrigation.model_dump(mode="json"),
+        4: questionnaire.environmental.model_dump(mode="json"),
+        5: questionnaire.organic_practices.model_dump(mode="json")
     }
     
     # Save each set
@@ -100,11 +100,11 @@ async def complete_questionnaire(
 
 @router.get("/user-responses")
 async def get_user_questionnaire_responses(
+    farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    farm = get_or_create_default_farm(db, current_user)
-    db.commit()
+    farm = get_existing_user_farm(db, current_user, farm_id)
 
     responses = db.query(QuestionnaireResponse).filter(
         QuestionnaireResponse.user_id == current_user.id,

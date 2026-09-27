@@ -66,3 +66,16 @@ def get_user_farm(db: Session, user: User, farm_id: int | None = None) -> Farm:
             detail="Farm not found",
         )
     return farm
+
+
+def get_existing_user_farm(db: Session, user: User, farm_id: int | None = None) -> Farm:
+    """Resolve an owned farm without creating or mutating data (safe for GETs)."""
+    query = db.query(Farm).filter(Farm.user_id == user.id)
+    if farm_id is not None:
+        query = query.filter(Farm.id == farm_id)
+    farm = query.order_by(Farm.id.asc()).first()
+    if not farm:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Farm not found")
+    return farm

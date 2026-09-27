@@ -9,10 +9,8 @@ import Signup from './pages/Signup';
 import Questionnaire from './pages/Questionnaire';
 import DiseaseCheckup from './pages/DiseaseCheckup';
 import GovernmentSchemes from './pages/GovernmentSchemes';
+import MandiPrices from './pages/MandiPrices';
 import AdvisorDashboard from './pages/AdvisorDashboard';
-import Finance from './pages/Finance';
-import Marketplace from './pages/Marketplace';
-import Community from './pages/Community';
 import './App.css';
 
 // Protected Route Component
@@ -105,19 +103,9 @@ function AppRoutes() {
           <GovernmentSchemes />
         </ProtectedRoute>
       } />
-      <Route path="/finance" element={
+      <Route path="/mandi-prices" element={
         <ProtectedRoute>
-          <Finance />
-        </ProtectedRoute>
-      } />
-      <Route path="/marketplace" element={
-        <ProtectedRoute>
-          <Marketplace />
-        </ProtectedRoute>
-      } />
-      <Route path="/community" element={
-        <ProtectedRoute>
-          <Community />
+          <MandiPrices />
         </ProtectedRoute>
       } />
       <Route path="/advisor" element={

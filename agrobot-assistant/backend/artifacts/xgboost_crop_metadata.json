@@ -1,0 +1,25 @@
+{
+  "metadata_version": "crop-model-metadata-v1",
+  "model_sha256": "06486e44840aa951ae741a1f8c6001b64b21d3f97f418c245942e872e361422b",
+  "model_version": "xgboost-crop-06486e44840a",
+  "feature_columns": ["N", "P", "K", "temperature", "humidity", "ph", "rainfall"],
+  "feature_ranges": {
+    "N": {"min": 0.0, "max": 140.0},
+    "P": {"min": 5.0, "max": 145.0},
+    "K": {"min": 5.0, "max": 120.0},
+    "temperature": {"min": 8.825, "max": 43.675},
+    "humidity": {"min": 14.258, "max": 99.981},
+    "ph": {"min": 3.504, "max": 9.935},
+    "rainfall": {"min": 20.211, "max": 298.56}
+  },
+  "training_rows": 2200,
+  "range_source": "Dataset/Crop_recommendation_cleaned_xgb.csv",
+  "feature_semantics": {
+    "rainfall": {
+      "unit": "unspecified",
+      "period": "training_dataset_unspecified",
+      "documentation_status": "not_documented_in_repository"
+    }
+  },
+  "rainfall_unit_warning": "The training dataset documents neither the rainfall unit nor its time period. Questionnaire annual rainfall must not be passed to this feature, converted, or compared with its range without verified provenance."
+}

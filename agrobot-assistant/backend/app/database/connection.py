@@ -20,8 +20,12 @@ if app_env_path.exists():
         if key != "DATABASE_URL" and value is not None and os.getenv(key) is None:
             os.environ[key] = value
 
+def _clean_database_url(value: str) -> str:
+    return value.strip().strip("\"'")
+
+
 # Database URL - defaults to SQLite for development
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./agrobot.db')
+DATABASE_URL = _clean_database_url(os.getenv('DATABASE_URL', 'sqlite:///./agrobot.db'))
 
 # Prefer psycopg v3 driver over psycopg2 for better local compatibility
 if DATABASE_URL.startswith("postgresql+psycopg2://"):

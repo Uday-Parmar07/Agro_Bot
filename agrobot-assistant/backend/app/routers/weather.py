@@ -52,12 +52,10 @@ def _get_today_snapshot(db: Session, farm_id: int):
 
 
 def _save_weather_snapshot(db: Session, farm_id: int, current: dict, forecast: dict | None = None):
-    source = current.get("_source") or (forecast or {}).get("_source") or "mock"
+    source = current.get("_source") or (forecast or {}).get("_source") or "unknown"
     forecast_items = (forecast or {}).get("forecast", [])
-    rainfall_mm = 0.0
-    if forecast_items:
-        rain_count = sum(1 for item in forecast_items if "rain" in str(item.get("description", "")).lower())
-        rainfall_mm = float(rain_count)
+    # A count of rainy forecast entries is not a rainfall measurement.
+    rainfall_mm = None
 
     snapshot = WeatherSnapshot(
         farm_id=farm_id,
@@ -78,11 +76,12 @@ def _save_weather_snapshot(db: Session, farm_id: int, current: dict, forecast: d
     return snapshot
 
 
-def _get_user_location(db: Session, user_id: int):
+def _get_user_location(db: Session, user_id: int, farm_id: int):
     env_response = (
         db.query(QuestionnaireResponse)
         .filter(
             QuestionnaireResponse.user_id == user_id,
+            QuestionnaireResponse.farm_id == farm_id,
             QuestionnaireResponse.set_number == 4,
         )
         .order_by(QuestionnaireResponse.updated_at.desc())
@@ -119,7 +118,7 @@ async def get_current_weather(
     if snapshot:
         return _snapshot_to_current(snapshot)
 
-    city, state = _get_user_location(db, current_user.id)
+    city, state = _get_user_location(db, current_user.id, farm.id)
     data = await weather_service.get_current_weather(city=city, state=state)
 
     if not data:
@@ -138,10 +137,10 @@ async def get_weather_forecast(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_user_farm(db, current_user, farm_id)
+    farm = get_user_farm(db, current_user, farm_id)
     db.commit()
 
-    city, state = _get_user_location(db, current_user.id)
+    city, state = _get_user_location(db, current_user.id, farm.id)
     data = await weather_service.get_weather_forecast(city=city, state=state)
 
     if not data:
@@ -166,7 +165,7 @@ async def get_weather_overview(
     if snapshot:
         return _snapshot_to_overview(snapshot)
 
-    city, state = _get_user_location(db, current_user.id)
+    city, state = _get_user_location(db, current_user.id, farm.id)
     current = await weather_service.get_current_weather(city=city, state=state)
     forecast = await weather_service.get_weather_forecast(city=city, state=state)
 

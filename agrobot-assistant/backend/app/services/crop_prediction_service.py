@@ -1,208 +1,294 @@
-"""XGBoost-based crop prediction service.
+"""XGBoost candidate generation with explicit model coverage and input status."""
 
-Loads the trained model lazily, builds a feature vector from questionnaire
-data + weather API, and returns the top-N crop predictions with confidence.
-"""
-
+import hashlib
+import json
 import logging
+import math
+import os
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Optional
+
+from app.models.farm_context import FarmContext, RainfallCompatibility
+from app.models.recommendation import (
+    CandidateSource,
+    CropCandidate,
+    CropModelResult,
+    ModelPredictionStatus,
+    ValidationWarning,
+)
+from app.services.crop_catalog_service import crop_catalog_service
+
 
 logger = logging.getLogger(__name__)
-
-MODEL_PATH = Path(__file__).resolve().parents[2] / "artifacts" / "xgboost_crop_model.joblib"
-
-# Smart defaults for NPK by soil texture (kg/ha, calibrated to dataset ranges)
-_NPK_DEFAULTS = {
-    "sandy":  {"N": 30.0, "P": 35.0, "K": 30.0},
-    "loamy":  {"N": 50.0, "P": 55.0, "K": 45.0},
-    "clayey": {"N": 60.0, "P": 60.0, "K": 50.0},
-    "silty":  {"N": 55.0, "P": 50.0, "K": 40.0},
-}
-_NPK_FALLBACK = {"N": 50.0, "P": 50.0, "K": 40.0}
-
-_PH_BY_TEXTURE = {
-    "sandy": 6.0,
-    "loamy": 6.5,
-    "clayey": 7.0,
-    "silty": 6.8,
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+MODEL_PATH = BACKEND_ROOT / "artifacts" / "xgboost_crop_model.joblib"
+MODEL_METADATA_PATH = BACKEND_ROOT / "artifacts" / "xgboost_crop_metadata.json"
+EXPECTED_FEATURE_COLUMNS = ["N", "P", "K", "temperature", "humidity", "ph", "rainfall"]
+ABSOLUTE_INPUT_BOUNDS = {
+    "N": (0.0, 1000.0),
+    "P": (0.0, 1000.0),
+    "K": (0.0, 1000.0),
+    "temperature": (-30.0, 70.0),
+    "humidity": (0.0, 100.0),
+    "ph": (0.0, 14.0),
+    "rainfall": (0.0, 10000.0),
 }
 
 
 class CropPredictionService:
-    """XGBoost crop prediction with lazy model loading."""
-
-    def __init__(self):
+    def __init__(self, model_path: Path = MODEL_PATH, metadata_path: Path = MODEL_METADATA_PATH):
+        self.model_path = model_path
+        self.metadata_path = metadata_path
         self._model = None
         self._label_encoder = None
-        self._feature_columns = None
+        self._feature_columns: list[str] = []
+        self._model_classes: list[str] = []
+        self._metadata: dict = {}
+        self._model_version = "unknown"
         self._loaded = False
-
-    # ── Lazy loading ──────────────────────────────────────────────────
 
     def _ensure_loaded(self) -> None:
         if self._loaded:
             return
-
         import joblib
 
-        if not MODEL_PATH.exists():
-            raise FileNotFoundError(f"XGBoost model not found: {MODEL_PATH}")
+        if not self.model_path.exists():
+            raise FileNotFoundError(f"XGBoost model not found: {self.model_path}")
+        artifact = joblib.load(self.model_path)
+        required_keys = {"model", "label_encoder", "feature_columns"}
+        if not required_keys.issubset(artifact):
+            raise ValueError(f"Model artifact is missing keys: {sorted(required_keys - set(artifact))}")
 
-        artifact = joblib.load(MODEL_PATH)
+        feature_columns = list(artifact["feature_columns"])
+        if feature_columns != EXPECTED_FEATURE_COLUMNS:
+            raise ValueError(
+                f"Unexpected model feature order {feature_columns}; expected {EXPECTED_FEATURE_COLUMNS}"
+            )
+        model_classes = [str(item) for item in artifact["label_encoder"].classes_.tolist()]
+        if not model_classes:
+            raise ValueError("The model label encoder contains no crop classes")
+
+        metadata = {}
+        if self.metadata_path.exists():
+            metadata = json.loads(self.metadata_path.read_text(encoding="utf-8"))
+        digest = hashlib.sha256(self.model_path.read_bytes()).hexdigest()
+        if metadata.get("model_sha256") and metadata["model_sha256"] != digest:
+            logger.warning("Crop model metadata hash does not match the serialized artifact")
+            metadata = {}
+
+        consistency_errors = crop_catalog_service.validate_catalog_consistency(model_classes)
+        missing_mapping = any(message.startswith("Model classes missing") for message in consistency_errors)
+        if missing_mapping:
+            raise ValueError("Crop catalogue does not cover every class in the loaded model")
+
         self._model = artifact["model"]
         self._label_encoder = artifact["label_encoder"]
-        self._feature_columns = artifact["feature_columns"]
+        self._feature_columns = feature_columns
+        self._model_classes = model_classes
+        self._metadata = metadata
+        self._model_version = metadata.get("model_version", f"xgboost-crop-{digest[:12]}")
         self._loaded = True
         logger.info(
-            "XGBoost crop model loaded: %d classes, features=%s",
-            len(self._label_encoder.classes_),
-            self._feature_columns,
+            "Loaded crop candidate model %s with %d label-encoder classes",
+            self._model_version,
+            len(model_classes),
         )
 
-    # ── Feature extraction ────────────────────────────────────────────
+    def get_model_classes(self) -> list[str]:
+        self._ensure_loaded()
+        return list(self._model_classes)
 
-    async def _build_feature_vector(self, user_data: Dict[str, Any]) -> Dict[str, float]:
-        """Build [N, P, K, temperature, humidity, ph, rainfall] from user data + weather."""
-        soil_physical = user_data.get("set_1", {})
-        soil_fertility = user_data.get("set_2", {})
-        environmental = user_data.get("set_4", {})
-
-        texture = str(soil_physical.get("soil_texture", "")).lower()
-        soil_test_done = bool(soil_fertility.get("soil_test_done"))
-        fertilizer_type = str(soil_fertility.get("fertilizer_type", "none")).lower()
-
-        n = self._resolve_npk(soil_fertility.get("npk_nitrogen"), soil_test_done, "N", texture, fertilizer_type)
-        p = self._resolve_npk(soil_fertility.get("npk_phosphorus"), soil_test_done, "P", texture, fertilizer_type)
-        k = self._resolve_npk(soil_fertility.get("npk_potassium"), soil_test_done, "K", texture, fertilizer_type)
-        ph = self._resolve_ph(soil_fertility.get("soil_ph"), soil_test_done, texture)
-
-        rainfall = self._safe_float(environmental.get("average_rainfall"))
-        if rainfall is None:
-            rainfall = 850.0
-
-        temperature = self._safe_float(environmental.get("average_temperature"))
-        humidity = None
-
-        if temperature is None or humidity is None:
-            weather = await self._fetch_weather(user_data)
-            if weather:
-                if temperature is None:
-                    temperature = weather.get("temperature", 27.0)
-                if humidity is None:
-                    humidity = weather.get("humidity", 65.0)
-
-        if temperature is None:
-            temperature = 27.0
-        if humidity is None:
-            humidity = 65.0
-
-        return {
-            "N": n, "P": p, "K": k,
-            "temperature": temperature,
-            "humidity": humidity,
-            "ph": ph,
-            "rainfall": rainfall,
-        }
-
-    @staticmethod
-    def _resolve_npk(raw_value, soil_test_done: bool, nutrient: str,
-                     texture: str, fertilizer_type: str) -> float:
-        if soil_test_done:
-            val = CropPredictionService._safe_float(raw_value)
-            if val is not None:
-                return val
-
-        base = _NPK_DEFAULTS.get(texture, _NPK_FALLBACK)
-        value = base[nutrient]
-
-        if fertilizer_type in ("chemical", "both"):
-            value *= 1.2
-        elif fertilizer_type == "none":
-            value *= 0.7
-
-        return round(value, 1)
-
-    @staticmethod
-    def _resolve_ph(raw_ph, soil_test_done: bool, texture: str) -> float:
-        if soil_test_done:
-            val = CropPredictionService._safe_float(raw_ph)
-            if val is not None:
-                return val
-        return _PH_BY_TEXTURE.get(texture, 6.5)
-
-    @staticmethod
-    async def _fetch_weather(user_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        try:
-            from app.services.weather_service import weather_service
-
-            environmental = user_data.get("set_4", {})
-            district = environmental.get("district", "")
-            state = environmental.get("state", "")
-
-            if not district and not state:
-                return None
-
-            return await weather_service.get_current_weather(
-                city=district or state,
-                state=state or district,
-            )
-        except Exception as e:
-            logger.warning("Weather fetch failed during crop prediction: %s", e)
-            return None
-
-    @staticmethod
-    def _safe_float(value) -> Optional[float]:
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (ValueError, TypeError):
-            return None
-
-    # ── Prediction ────────────────────────────────────────────────────
-
-    async def predict_crops(self, user_data: Dict[str, Any],
-                            top_n: int = 5) -> List[Dict[str, Any]]:
-        """Return top N crop predictions with confidence scores.
-
-        Returns: [{"crop_name": "rice", "confidence": 0.87, "rank": 1}, ...]
-        """
+    def validate_catalog_at_startup(self) -> None:
         try:
             self._ensure_loaded()
-        except Exception as e:
-            logger.error("Failed to load XGBoost model: %s", e)
-            return []
+        except Exception as exc:
+            logger.error("Crop model/catalogue startup validation failed: %s", exc)
 
+    def _validate_features(
+        self,
+        features: dict[str, Optional[float]],
+        allowed_missing: set[str] | None = None,
+    ) -> list[ValidationWarning]:
+        warnings = []
+        allowed_missing = allowed_missing or set()
+        if list(features) != EXPECTED_FEATURE_COLUMNS:
+            warnings.append(
+                ValidationWarning(
+                    code="FEATURE_ORDER_MISMATCH",
+                    message="Inference feature names or order do not match the trained model contract.",
+                )
+            )
+            return warnings
+        for name, value in features.items():
+            if name in allowed_missing and value is None:
+                continue
+            if value is None or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                warnings.append(
+                    ValidationWarning(code="MISSING_OR_INVALID_FEATURE", message=f"{name} is missing or invalid.")
+                )
+                continue
+            lower, upper = ABSOLUTE_INPUT_BOUNDS[name]
+            if float(value) < lower or float(value) > upper:
+                warnings.append(
+                    ValidationWarning(
+                        code="EXTREME_FEATURE_VALUE",
+                        message=f"{name} is outside basic numeric safety bounds.",
+                    )
+                )
+        return warnings
+
+    def _distribution_warnings(self, features: dict[str, float]) -> list[ValidationWarning]:
+        warnings = []
+        ranges = self._metadata.get("feature_ranges", {})
+        for name, value in features.items():
+            limits = ranges.get(name)
+            if not limits:
+                continue
+            if value < limits["min"] or value > limits["max"]:
+                warnings.append(
+                    ValidationWarning(
+                        code="MODEL_INPUT_OUT_OF_RANGE",
+                        message=(
+                            f"{name} is outside the observed training range "
+                            f"[{limits['min']}, {limits['max']}]."
+                        ),
+                    )
+                )
+        return warnings
+
+    async def generate_candidates(self, context: FarmContext, top_k: Optional[int] = None) -> CropModelResult:
+        features = context.model_features()
+        base = {
+            "model_version": self._model_version,
+            "model_supported_crop_count": len(self._model_classes),
+            "model_classes": list(self._model_classes),
+            "feature_columns": list(EXPECTED_FEATURE_COLUMNS),
+            "feature_values": features,
+        }
+        try:
+            self._ensure_loaded()
+            base.update(
+                model_version=self._model_version,
+                model_supported_crop_count=len(self._model_classes),
+                model_classes=list(self._model_classes),
+                feature_columns=list(self._feature_columns),
+            )
+        except Exception as exc:
+            logger.error("Crop candidate model unavailable: %s", exc)
+            return CropModelResult(
+                status=ModelPredictionStatus.MODEL_UNAVAILABLE,
+                warnings=[ValidationWarning(code="MODEL_UNAVAILABLE", message="Crop model is unavailable.")],
+                **base,
+            )
+
+        rainfall_withheld = (
+            context.model_compatible_rainfall_mm is None
+            or context.rainfall_compatibility != RainfallCompatibility.COMPATIBLE
+        )
+        allow_missing_rainfall = os.getenv(
+            "ENABLE_PRELIMINARY_MODEL_WITH_MISSING_RAINFALL", "true"
+        ).lower() in {"1", "true", "yes"}
+        if rainfall_withheld and not allow_missing_rainfall:
+            return CropModelResult(
+                status=ModelPredictionStatus.INSUFFICIENT_COMPATIBLE_INPUT,
+                warnings=[
+                    ValidationWarning(
+                        code="RAINFALL_PERIOD_INCOMPATIBLE",
+                        message=(
+                            "The available rainfall value has not been shown to use the same period "
+                            "as the model training feature. Model inference was not run."
+                        ),
+                    )
+                ],
+                **base,
+            )
+
+        # XGBoost has a defined missing-value path. Keep rainfall absent rather
+        # than converting annual rainfall or inventing a model-scale default.
+        # The result is always preliminary because this artifact was not
+        # validated for farm records with a missing rainfall input.
+        invalid = self._validate_features(
+            features,
+            allowed_missing={"rainfall"} if rainfall_withheld else set(),
+        )
+        if invalid:
+            return CropModelResult(status=ModelPredictionStatus.INVALID_INPUT, warnings=invalid, **base)
+
+        numeric_features = {key: float(value) for key, value in features.items() if value is not None}
+        distribution_warnings = self._distribution_warnings(numeric_features)
         try:
             import numpy as np
             import pandas as pd
 
-            features = await self._build_feature_vector(user_data)
-            logger.info("XGBoost feature vector: %s", features)
-
-            df = pd.DataFrame([features])[self._feature_columns]
-            proba = self._model.predict_proba(df)[0]
-
-            top_indices = np.argsort(proba)[::-1][:top_n]
-
-            predictions = []
-            for rank, idx in enumerate(top_indices, start=1):
-                crop_name = self._label_encoder.inverse_transform([idx])[0]
-                confidence = float(proba[idx])
-                if confidence >= 0.01:
-                    predictions.append({
-                        "crop_name": crop_name,
-                        "confidence": round(confidence, 4),
-                        "rank": rank,
-                    })
-
-            logger.info("XGBoost predictions: %s", predictions)
-            return predictions
-
-        except Exception as e:
-            logger.error("XGBoost prediction failed: %s", e, exc_info=True)
-            return []
+            inference_values = {
+                column: numeric_features.get(column, np.nan)
+                for column in self._feature_columns
+            }
+            frame = pd.DataFrame([inference_values], columns=self._feature_columns)
+            probabilities = self._model.predict_proba(frame)[0]
+            requested = top_k if top_k is not None else int(os.getenv("CROP_MODEL_TOP_K", "10"))
+            limit = max(1, min(int(requested), len(self._model_classes)))
+            top_indices = np.argsort(probabilities)[::-1][:limit]
+            candidates = []
+            for rank, index in enumerate(top_indices, start=1):
+                raw_label = str(self._label_encoder.inverse_transform([int(index)])[0])
+                profile = crop_catalog_service.get_crop_profile(raw_label)
+                if not profile or not profile.is_active:
+                    logger.error("Dropping model class without active catalogue profile: %s", raw_label)
+                    continue
+                candidates.append(
+                    CropCandidate(
+                        crop_slug=profile.crop_slug,
+                        crop_name=profile.display_name,
+                        candidate_sources=[CandidateSource.XGBOOST],
+                        model_probability=float(probabilities[index]),
+                        model_rank=rank,
+                    )
+                )
+            if not candidates:
+                return CropModelResult(status=ModelPredictionStatus.MODEL_UNAVAILABLE, **base)
+            low_threshold = float(os.getenv("CROP_MODEL_LOW_CONFIDENCE_THRESHOLD", "0.15"))
+            if rainfall_withheld:
+                status = ModelPredictionStatus.PRELIMINARY_MISSING_INPUT
+            elif distribution_warnings:
+                status = ModelPredictionStatus.OUT_OF_DISTRIBUTION
+            elif candidates[0].model_probability is not None and candidates[0].model_probability < low_threshold:
+                status = ModelPredictionStatus.LOW_CONFIDENCE
+            else:
+                status = ModelPredictionStatus.SUCCESS
+            result_warnings = list(distribution_warnings)
+            if rainfall_withheld:
+                result_warnings.append(
+                    ValidationWarning(
+                        code="MODEL_RAINFALL_WITHHELD",
+                        message=(
+                            "Rainfall was left missing during model inference because the available value "
+                            "does not have compatible time-period semantics. This result is preliminary."
+                        ),
+                    )
+                )
+            if status == ModelPredictionStatus.LOW_CONFIDENCE:
+                low_warning = ValidationWarning(
+                    code="LOW_MODEL_CONFIDENCE",
+                    message=(
+                        "The strongest model match is below the provisional product threshold; "
+                        "this probability is not calibrated as a real-world success rate."
+                    ),
+                )
+                result_warnings.append(low_warning)
+            return CropModelResult(
+                status=status,
+                candidates=candidates,
+                warnings=result_warnings,
+                **base,
+            )
+        except Exception as exc:
+            logger.exception("XGBoost candidate generation failed: %s", exc)
+            return CropModelResult(
+                status=ModelPredictionStatus.MODEL_UNAVAILABLE,
+                warnings=[ValidationWarning(code="MODEL_INFERENCE_FAILED", message="Crop model inference failed.")],
+                **base,
+            )
 
 
 crop_prediction_service = CropPredictionService()

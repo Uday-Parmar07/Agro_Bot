@@ -73,9 +73,10 @@ class ApiService {
   }
 
   // Questionnaire endpoints
-  async submitQuestionnaireSet(setNumber, answers, userId) {
+  async submitQuestionnaireSet(setNumber, answers, userId, farmId) {
     const response = await api.post('/questionnaire/submit-set', {
       user_id: userId,
+      farm_id: farmId,
       set_number: setNumber,
       answers: answers
     });
@@ -87,8 +88,10 @@ class ApiService {
     return response.data;
   }
 
-  async getUserQuestionnaireResponses() {
-    const response = await api.get('/questionnaire/user-responses');
+  async getUserQuestionnaireResponses(farmId) {
+    const response = await api.get('/questionnaire/user-responses', {
+      params: farmId ? { farm_id: farmId } : {}
+    });
     return response.data;
   }
 
@@ -105,30 +108,29 @@ class ApiService {
   // Recommendations endpoints
   async generateRecommendations(farmId) {
     try {
-      console.log('🤖 Calling generate recommendations API...');
       const response = await api.post('/recommendations/generate', null, {
         params: farmId ? { farm_id: farmId } : {}
       });
-      console.log('✅ Generate recommendations response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Generate recommendations error:', error);
-      console.error('Error response:', error.response?.data);
       throw error;
     }
   }
 
+  async refreshRecommendations(farmId) {
+    const response = await api.post('/recommendations/refresh', null, {
+      params: farmId ? { farm_id: farmId } : {}
+    });
+    return response.data;
+  }
+
   async getLatestRecommendations(farmId) {
     try {
-      console.log('📊 Calling get latest recommendations API...');
       const response = await api.get('/recommendations/latest', {
         params: farmId ? { farm_id: farmId } : {}
       });
-      console.log('✅ Latest recommendations response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('❌ Get latest recommendations error:', error);
-      console.error('Error response:', error.response?.data);
       throw error;
     }
   }
@@ -200,6 +202,55 @@ class ApiService {
     return response.data;
   }
 
+  async getMandiCurrent(farmId, crop, location = {}, timeout = 30000) {
+    const response = await api.get('/mandi-prices/current', {
+      timeout,
+      params: {
+        farm_id: farmId,
+        crop,
+        market: location.market || undefined,
+        state: location.state || undefined,
+        district: location.district || undefined,
+      }
+    });
+    return response.data;
+  }
+
+  async compareMandiPrices(farmId, crop, radiusKm = 250) {
+    const response = await api.get('/mandi-prices/compare', {
+      params: { farm_id: farmId, crop, radius_km: radiusKm }
+    });
+    return response.data;
+  }
+
+  async getMandiTrend(market, crop, days = 30) {
+    const response = await api.get('/mandi-prices/trend', {
+      params: { market, crop, days }
+    });
+    return response.data;
+  }
+
+  async getMandiNews(crop) {
+    const response = await api.get('/mandi-prices/news', {
+      params: { crop }
+    });
+    return response.data;
+  }
+
+  async getMandiLocations(filters = {}) {
+    const response = await api.get('/mandi-prices/locations', {
+      params: filters
+    });
+    return response.data;
+  }
+
+  async searchMandiCommodities(q = '') {
+    const response = await api.get('/mandi-prices/commodities', {
+      params: { q }
+    });
+    return response.data;
+  }
+
   async getAnalyticsOverview(farmId) {
     const response = await api.get('/analytics/overview', {
       params: farmId ? { farm_id: farmId } : {}
@@ -234,59 +285,6 @@ class ApiService {
     return response.data;
   }
 
-  async createHarvestOutcome(payload) {
-    const response = await api.post('/harvest-outcomes', payload);
-    return response.data;
-  }
-
-  async getProfitability(farmId) {
-    const response = await api.get('/analytics/profitability', {
-      params: farmId ? { farm_id: farmId } : {}
-    });
-    return response.data;
-  }
-
-  async createListing(payload) {
-    const response = await api.post('/marketplace/listings', payload);
-    return response.data;
-  }
-
-  async getListings(filters = {}) {
-    const response = await api.get('/marketplace/listings', { params: filters });
-    return response.data;
-  }
-
-  async updateListing(listingId, payload) {
-    const response = await api.patch(`/marketplace/listings/${listingId}`, payload);
-    return response.data;
-  }
-
-  async createForumPost(payload) {
-    const response = await api.post('/forum/posts', payload);
-    return response.data;
-  }
-
-  async getForumPosts(filters = {}) {
-    const response = await api.get('/forum/posts', { params: filters });
-    return response.data;
-  }
-
-  async createForumReply(postId, payload) {
-    const response = await api.post(`/forum/posts/${postId}/replies`, payload);
-    return response.data;
-  }
-
-  async reportContent(payload) {
-    const response = await api.post('/reports', payload);
-    return response.data;
-  }
-
-  async hideContent(targetType, targetId) {
-    const response = await api.post('/reports/admin/hide', null, {
-      params: { target_type: targetType, target_id: targetId }
-    });
-    return response.data;
-  }
 }
 
 // eslint-disable-next-line import/no-anonymous-default-export

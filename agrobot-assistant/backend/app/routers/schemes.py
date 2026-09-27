@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
 from app.database.schemas import SchemeRecord, User
-from app.models.finance import SchemeRecordCreate, SchemeRecordResponse, SchemeRecordUpdate
+from app.models.scheme import SchemeRecordCreate, SchemeRecordResponse, SchemeRecordUpdate
 from app.services.farm_service import get_user_farm
 from app.utils.auth_utils import get_current_user
 

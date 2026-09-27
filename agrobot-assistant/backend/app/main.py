@@ -3,8 +3,9 @@ from pathlib import Path
 from fastapi import FastAPI, Depends
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import analytics, auth, advisor, community, dashboard, farms, harvest, marketplace, questionnaire, recommendations, reports, schemes, disease, users, voice, weather
+from app.routers import analytics, auth, advisor, dashboard, farms, mandi_prices, questionnaire, recommendations, schemes, disease, users, voice, weather
 from app.database.migrations import run_migrations
+from app.services.crop_prediction_service import crop_prediction_service
 
 app = FastAPI(
     title="AgroBot API",
@@ -34,15 +35,12 @@ app.include_router(questionnaire.router, prefix="/api/questionnaire", tags=["Que
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["AI Recommendations"])
 app.include_router(disease.router, prefix="/api/disease", tags=["Disease Checkup"])
 app.include_router(weather.router, prefix="/api/weather", tags=["Weather"])
+app.include_router(mandi_prices.router, prefix="/api/mandi-prices", tags=["Mandi Prices"])
 app.include_router(voice.router, prefix="/api/voice", tags=["Voice"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
 app.include_router(advisor.router, prefix="/api/advisor", tags=["Advisor"])
 app.include_router(schemes.router, prefix="/api/schemes", tags=["Schemes"])
-app.include_router(harvest.router, prefix="/api/harvest-outcomes", tags=["Harvest Outcomes"])
-app.include_router(marketplace.router, prefix="/api/marketplace", tags=["Marketplace"])
-app.include_router(community.router, prefix="/api/forum", tags=["Community Forum"])
-app.include_router(reports.router, prefix="/api/reports", tags=["Reports"])
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_BUILD_DIR = BASE_DIR / "frontend" / "build"
@@ -50,13 +48,20 @@ FRONTEND_INDEX = FRONTEND_BUILD_DIR / "index.html"
 
 @app.on_event("startup")
 async def startup_event():
-    run_migrations()
+    if os.getenv("RUN_MIGRATIONS", "true").lower() in {"1", "true", "yes"}:
+        run_migrations()
+    crop_prediction_service.validate_catalog_at_startup()
 
 @app.get("/")
 async def root():
     if FRONTEND_INDEX.exists():
         return FileResponse(FRONTEND_INDEX)
     return {"message": "AgroBot API is running!"}
+
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
 
 
 @app.get("/{full_path:path}")
