@@ -228,3 +228,12 @@ agrobot-assistant/backend/experiments.ipynb
 
 # Redesign context: screenshots are regenerable from the Playwright script
 redesign-context/**/*.png
+redesign-context/_inbox/
+
+# Stitch website-redesign export — vendor output, ~53 MB with its archive.
+# The design system it carries is already ported into
+# agrobot-assistant/frontend/src/styles/tokens.css, so the export is a
+# reference copy, not a build input.
+Website redesign/
+Website redesign.zip
+AgroBot Mandi Prices.html

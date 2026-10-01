@@ -1,18 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-IN">
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#059669" />
+    <meta name="theme-color" content="#f5ead8" />
     <meta
       name="description"
-      content="Agricultural Dashboard - Monitor and optimize your farming operations with real-time insights"
+      content="AgroBot is an AI farming assistant for Indian farmers. Get crop recommendations for your soil, check plant disease from a leaf photo, see today's mandi prices and find government schemes — in English and हिंदी."
     />
-    <title>AgroBot Assistant - Agricultural Dashboard</title>
+    <title>AgroBot – AI Farming Assistant for Indian Farmers</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-5KBTS5VNTX"></script>
     <script>
@@ -23,30 +23,17 @@
       gtag('config', 'G-5KBTS5VNTX');
     </script>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-      
+      /* Paint the Organic ground before the bundle loads so there is no flash. */
+      html { background-color: #f5ead8; }
       body {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-          'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-          sans-serif;
+        margin: 0;
+        font-family: 'Figtree', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background-color: #f5ead8;
+        color: #201e1d;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
-        background-color: #f8fafc;
-        color: #1e293b;
       }
-      
-      code {
-        font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-          monospace;
-      }
-
-      #root {
-        min-height: 100vh;
-      }
+      #root { min-height: 100vh; }
     </style>
   </head>
   <body>

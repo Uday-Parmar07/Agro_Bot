@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import CropMonitor from './CropMonitor';
 import MandiPriceTeaser from './MandiPriceTeaser';
@@ -8,7 +9,10 @@ import ApiService from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { cultivatedCropSummary, farmerSelectedCrops } from '../utils/dashboard';
 import {
-  AskAgroBotFab,
+  AppTopBar,
+  AskAgroBotDialog,
+  MobileTabBar,
+  MoreSheet,
   CropGrowthProgress,
   CropRecommendationsGrid,
   DecisionSidebar,
@@ -37,6 +41,7 @@ const Dashboard = () => {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
   const { updateLanguage } = useAuth();
+  const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [farms, setFarms] = useState([]);
@@ -49,6 +54,7 @@ const Dashboard = () => {
   const [error, setError] = useState(null);
   const [showAddCropModal, setShowAddCropModal] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [recommendationRefreshing, setRecommendationRefreshing] = useState(false);
   const [recommendationError, setRecommendationError] = useState(null);
 
@@ -278,6 +284,16 @@ const Dashboard = () => {
     }));
   }, [recommendations]);
 
+  const farmLabel = useMemo(() => {
+    const farm = farms.find((item) => item.id === selectedFarmId);
+    if (!farm) return null;
+    const bits = [farmSummary.farmSize, farmSummary.season]
+      .filter((bit) => bit && !/not (available|specified)/i.test(bit));
+    return { name: farm.name, detail: bits.join(' · ') || 'Farm overview' };
+  }, [farms, selectedFarmId, farmSummary]);
+
+  const goTo = (href) => navigate(href);
+
   const growthStage = useMemo(() => {
     if (!userCrops.length) return 'Seedling';
     const firstCrop = userCrops[0];
@@ -302,6 +318,8 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard-layout decision-layout">
+      <a className="skip-link" href="#main">Skip to content</a>
+
       <DecisionSidebar
         user={user}
         activeTab={activeTab}
@@ -309,28 +327,40 @@ const Dashboard = () => {
         logout={logout}
         onAddCrop={() => setShowAddCropModal(true)}
         farmId={selectedFarmId}
+        farmLabel={farmLabel}
+        onNavigate={goTo}
       />
 
-      <main className="main-content">
+      <div className="main-column">
+        <AppTopBar farmLabel={farmLabel} onAsk={() => setAssistantOpen(true)} />
+
+        <main className="main-content" id="main">
         <header className="page-header">
           <div className="dashboard-title-row">
             <div>
-              <h1 className="page-title">AgroBot Dashboard</h1>
+              <p className="page-eyebrow">{farmLabel ? farmLabel.name : 'Your farm'}</p>
+              <h1 className="page-title">Today on your farm</h1>
               <p className="page-subtitle">{t('dashboard.subtitle')}</p>
             </div>
-            {farms.length > 1 && (
-              <select
-                className="farm-switcher"
-                value={selectedFarmId || ''}
-                onChange={(event) => setSelectedFarmId(Number(event.target.value))}
-              >
-                {farms.map((farm) => (
-                  <option key={farm.id} value={farm.id}>
-                    {farm.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            <div className="header-actions">
+              {farms.length > 1 && (
+                <select
+                  className="select"
+                  aria-label="Choose farm"
+                  value={selectedFarmId || ''}
+                  onChange={(event) => setSelectedFarmId(Number(event.target.value))}
+                >
+                  {farms.map((farm) => (
+                    <option key={farm.id} value={farm.id}>
+                      {farm.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button type="button" className="btn btn-secondary" onClick={() => setAssistantOpen(true)}>
+                Ask AgroBot
+              </button>
+            </div>
           </div>
         </header>
 
@@ -426,20 +456,32 @@ const Dashboard = () => {
           </section>
         )}
 
-        <AskAgroBotFab onClick={() => setAssistantOpen((prev) => !prev)} />
+        </main>
 
-        {assistantOpen && (
-          <section className="assistant-panel">
-            <h3>Ask AgroBot</h3>
-            <p>Quick help for daily decisions.</p>
-            <div className="assistant-prompt-list">
-              <button>When should I irrigate my field?</button>
-              <button>Which crop suits my soil?</button>
-              <button>How to treat this disease?</button>
-            </div>
-          </section>
-        )}
-      </main>
+        <MobileTabBar
+          user={user}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          farmId={selectedFarmId}
+          onNavigate={goTo}
+          onMore={() => setMoreOpen(true)}
+          moreOpen={moreOpen}
+        />
+      </div>
+
+      {moreOpen && (
+        <MoreSheet
+          user={user}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          farmId={selectedFarmId}
+          onNavigate={goTo}
+          onClose={() => setMoreOpen(false)}
+          logout={logout}
+        />
+      )}
+
+      {assistantOpen && <AskAgroBotDialog onClose={() => setAssistantOpen(false)} />}
 
       {showAddCropModal && (
         <AddCropModal

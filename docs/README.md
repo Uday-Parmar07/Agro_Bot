@@ -49,6 +49,18 @@ For migrating data to Neon PostgreSQL and deploying the combined frontend/backen
 container on AWS, see [docs/neon-aws-deployment.md](docs/neon-aws-deployment.md).
 
 
+## Documentation
+
+All project documentation lives in [`docs/`](docs/):
+
+| Document | What it covers |
+| --- | --- |
+| [AgroBot_PRD_TRD.md](docs/AgroBot_PRD_TRD.md) | Product and technical requirements |
+| [CROP_RECOMMENDATION_ARCHITECTURE.md](docs/CROP_RECOMMENDATION_ARCHITECTURE.md) | How the crop recommendation pipeline is built |
+| [neon-aws-deployment.md](docs/neon-aws-deployment.md) | Neon PostgreSQL migration and AWS container deployment |
+| [AUDIT_REPORT.md](docs/AUDIT_REPORT.md) | Codebase audit findings |
+
+
 ## Usage
 
 1. Sign up and complete the onboarding questionnaire.

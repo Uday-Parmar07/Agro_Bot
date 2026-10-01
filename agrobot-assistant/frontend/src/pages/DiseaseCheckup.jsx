@@ -100,7 +100,12 @@ const LOW_CONFIDENCE = 0.45;
 /* ── helpers ── */
 const isHealthy = (cls) => /healthy/i.test(cls || '');
 const confPct = (c) => `${(c * 100).toFixed(1)}%`;
-const confColor = (c) => (c >= 0.85 ? '#10b981' : c >= 0.6 ? '#f59e0b' : '#ef4444');
+// Confidence reads on the Organic status ramps, not ad-hoc hexes.
+const confColor = (c) => (
+  c >= 0.85 ? 'var(--color-accent-2-500)'
+    : c >= 0.6 ? 'var(--tone-caution-ink)'
+      : 'var(--tone-urgent-ink)'
+);
 
 const DiseaseCheckup = () => {
   const [lang, setLang] = useState('en');
@@ -235,20 +240,21 @@ const DiseaseCheckup = () => {
               onDragLeave={onDragLeave}
               onDrop={onDrop}
             >
-              <Upload size={36} style={{ color: '#60a5fa', marginBottom: 8 }} />
+              <Upload size={36} strokeWidth={2.75} style={{ color: 'var(--color-accent)', marginBottom: 8 }} />
               <p className="dc-drop-text">{t.dragDrop}</p>
               <span className="dc-drop-or">{t.or}</span>
+              {/* Camera leads: most users photograph a leaf on a phone. */}
               <div className="dc-drop-btns">
-                <button className="dc-upload-btn" onClick={() => fileRef.current?.click()}>
-                  <Upload size={16} />{t.uploadBtn}
-                </button>
                 <button className="dc-camera-btn" onClick={() => cameraRef.current?.click()}>
-                  <Camera size={16} />{t.cameraBtn}
+                  <Camera size={18} strokeWidth={2.75} />{t.cameraBtn}
                 </button>
-                <button className="dc-camera-btn" onClick={handleVoiceNote}>
-                  {voice.recording ? 'Use Note' : 'Voice Note'}
+                <button className="dc-upload-btn" onClick={() => fileRef.current?.click()}>
+                  <Upload size={18} strokeWidth={2.75} />{t.uploadBtn}
                 </button>
               </div>
+              <button className="dc-voice-btn" onClick={handleVoiceNote}>
+                {voice.recording ? 'Use Note' : 'Voice Note'}
+              </button>
               {voiceNote && <span className="dc-accepted">Transcript: {voiceNote}</span>}
               {voice.error && <span className="dc-accepted">{voice.error}</span>}
               <span className="dc-accepted">{t.accepted}</span>
@@ -260,9 +266,9 @@ const DiseaseCheckup = () => {
             <div className="dc-tips">
               <h3>{t.tipsTitle}</h3>
               <div className="dc-tips-grid">
-                <div className="dc-tip"><Sun size={18} color="#fbbf24" /><span>{t.tip1}</span></div>
-                <div className="dc-tip"><Focus size={18} color="#34d399" /><span>{t.tip2}</span></div>
-                <div className="dc-tip"><ImageOff size={18} color="#f87171" /><span>{t.tip3}</span></div>
+                <div className="dc-tip"><Sun size={18} strokeWidth={2.75} color="var(--tone-caution-ink)" /><span>{t.tip1}</span></div>
+                <div className="dc-tip"><Focus size={18} strokeWidth={2.75} color="var(--color-accent-2-600)" /><span>{t.tip2}</span></div>
+                <div className="dc-tip"><ImageOff size={18} strokeWidth={2.75} color="var(--tone-urgent-ink)" /><span>{t.tip3}</span></div>
               </div>
             </div>
 
@@ -318,7 +324,7 @@ const DiseaseCheckup = () => {
             {/* LOW CONFIDENCE warning */}
             {lowConfidence && (
               <div className="dc-low-conf">
-                <AlertTriangle size={20} color="#fbbf24" />
+                <AlertTriangle size={20} strokeWidth={2.75} />
                 <div>
                   <p>{t.lowConf}</p>
                   <button onClick={resetAll}>{t.tryAnother}</button>

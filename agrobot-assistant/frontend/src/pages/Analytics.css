@@ -1,368 +1,398 @@
+/* Farm history — Organic. Same ground as the dashboard, and it now has the
+   media queries it never had: the header wraps and the KPI row reflows. */
+
 .analytics-page {
   min-height: 100vh;
-  background: #f8fafc;
-  padding: 32px;
+  background: var(--color-bg);
+  padding: clamp(16px, 4vw, 32px);
 }
 
 .analytics-container {
-  max-width: 1400px;
+  max-width: var(--content-max);
   margin: 0 auto;
 }
 
 .analytics-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid #e5e7eb;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-6);
+  border-bottom: 1px solid var(--color-divider);
 }
 
-.header-content h1 {
-  font-size: 32px;
-  font-weight: 700;
-  color: #111827;
-  margin-bottom: 8px;
+.analytics-header .header-content h1 {
+  font-size: clamp(32px, 4vw, 44px);
+  margin: 0 0 4px;
 }
 
-.header-content p {
-  color: #6b7280;
+.analytics-header .header-content p {
+  margin: 0;
+  color: var(--ink-muted);
   font-size: 16px;
+  max-width: 54ch;
 }
 
 .header-controls {
   display: flex;
-  gap: 16px;
+  gap: var(--space-3);
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .time-range-selector {
-  display: flex;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  display: inline-flex;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-pill);
   overflow: hidden;
+  max-width: 100%;
 }
 
 .time-btn {
+  min-height: 44px;
   padding: 8px 16px;
-  background: none;
+  background: transparent;
   border: none;
-  color: #6b7280;
+  color: var(--color-text);
+  font: inherit;
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  white-space: nowrap;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.time-btn + .time-btn {
+  border-left: 1px solid var(--color-divider);
 }
 
 .time-btn:hover {
-  background: #f9fafb;
+  background: rgba(32, 30, 29, 0.07);
 }
 
 .time-btn.active {
-  background: #059669;
-  color: white;
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* The farm select reuses .time-btn in the markup — give it its own shape. */
+select.time-btn {
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  padding-inline: 16px;
+}
+
+.analytics-page .btn-primary {
+  min-height: 44px;
 }
 
 .analytics-overview {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
-  margin-bottom: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
 }
 
 .overview-card {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 24px;
-  transition: all 0.2s ease;
-}
-
-.overview-card:hover {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  gap: var(--space-2);
 }
 
 .card-header h3 {
-  font-size: 14px;
-  font-weight: 500;
-  color: #6b7280;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
 }
 
 .card-icon {
   width: 20px;
   height: 20px;
+  flex: none;
 }
 
-.card-icon.positive {
-  color: #059669;
-}
-
-.card-icon.negative {
-  color: #dc2626;
-}
+.card-icon.positive { color: var(--color-accent-2-700); }
+.card-icon.negative { color: var(--tone-urgent-ink); }
 
 .card-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #111827;
-  margin-bottom: 8px;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 34px;
+  line-height: 1.1;
+  color: var(--color-text);
 }
 
 .card-change {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 14px;
+  color: var(--ink-muted);
 }
 
-.card-change.positive {
-  color: #059669;
-}
-
+.card-change.positive,
 .card-change.negative {
-  color: #dc2626;
+  color: var(--ink-muted);
 }
 
 .analytics-charts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 32px;
-  margin-bottom: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
 }
 
 .chart-section {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 24px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--space-6);
 }
 
 .chart-header {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 
 .chart-header h2 {
-  font-size: 20px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 4px;
+  font-size: 24px;
+  margin: 0 0 4px;
 }
 
 .chart-header p {
-  color: #6b7280;
-  font-size: 14px;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 15px;
 }
 
 .crop-performance-chart {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .crop-bar-item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .crop-info {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
 }
 
-.crop-name {
-  font-weight: 500;
-  color: #374151;
+.crop-info .crop-name {
+  font-weight: 700;
+  color: var(--color-text);
 }
 
 .crop-yield {
-  font-size: 14px;
-  color: #6b7280;
+  font-size: 15px;
+  color: var(--ink-muted);
 }
 
 .progress-container {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
 }
 
-.progress-bar {
+/* Scoped: the wizard also defines .progress-bar / .progress-fill. */
+.analytics-page .progress-bar {
   flex: 1;
-  height: 8px;
-  background: #f3f4f6;
-  border-radius: 4px;
+  height: 10px;
+  background: var(--color-bg);
+  border-radius: var(--radius-pill);
   overflow: hidden;
 }
 
-.progress-fill {
+.analytics-page .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #059669, #10b981);
-  border-radius: 4px;
+  background: var(--color-accent-2-500);
+  border-radius: var(--radius-pill);
   transition: width 0.3s ease;
 }
 
 .efficiency-badge {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: #059669;
-  background: #ecfdf5;
-  padding: 4px 8px;
-  border-radius: 4px;
+  color: var(--color-accent-2-800);
+  background: var(--color-accent-2-100);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
 }
 
 .trends-chart {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--space-4);
 }
 
 .chart-legend {
   display: flex;
-  gap: 20px;
-  justify-content: center;
+  gap: var(--space-4);
+  align-items: center;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: #6b7280;
+  font-size: 14px;
+  color: var(--ink-muted);
 }
 
 .legend-color {
   width: 12px;
   height: 12px;
-  border-radius: 2px;
+  border-radius: 50%;
 }
 
-.legend-color.yield {
-  background: #059669;
-}
-
-.legend-color.water {
-  background: #0891b2;
-}
-
-.legend-color.efficiency {
-  background: #7c3aed;
+/* The legend swatch and the bars must be one colour — they were not before. */
+.legend-color.yield,
+.chart-bar.yield {
+  background: var(--color-accent-2-500);
 }
 
 .chart-grid {
   display: flex;
   justify-content: space-between;
-  align-items: end;
+  align-items: flex-end;
+  gap: var(--space-2);
   height: 200px;
-  padding: 0 16px;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
 }
 
 .chart-column {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+  height: 100%;
 }
 
-.chart-bars {
+.chart-column .chart-bars {
   display: flex;
-  gap: 2px;
-  align-items: end;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
   height: 160px;
 }
 
 .chart-bar {
-  width: 8px;
-  border-radius: 2px 2px 0 0;
+  width: min(100%, 28px);
+  border-radius: var(--radius-pill) var(--radius-pill) 0 0;
   transition: height 0.3s ease;
 }
 
-.chart-bar.yield {
-  background: #059669;
-}
-
-.chart-bar.water {
-  background: #0891b2;
-}
-
-.chart-bar.efficiency {
-  background: #7c3aed;
-}
-
 .chart-label {
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 500;
+  font-size: 13px;
+  color: var(--ink-muted);
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .insights-section {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 32px;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--space-6);
 }
 
 .insights-section h2 {
-  font-size: 24px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 24px;
+  font-size: 26px;
+  margin: 0 0 var(--space-6);
 }
 
 .insights-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: var(--space-4);
 }
 
 .insight-card {
   display: flex;
-  gap: 16px;
-  padding: 20px;
-  background: #f9fafb;
-  border-radius: 12px;
-  border: 1px solid #f3f4f6;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-bg);
+  border-radius: var(--radius-card);
 }
 
 .insight-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   width: 48px;
   height: 48px;
-  border-radius: 12px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
 .insight-icon.positive {
-  background: #ecfdf5;
-  color: #059669;
+  background: var(--color-accent-2-100);
+  color: var(--color-accent-2-800);
 }
 
 .insight-icon.warning {
-  background: #fef3c7;
-  color: #d97706;
+  background: var(--tone-caution-bg);
+  color: var(--tone-caution-ink);
 }
 
 .insight-icon.info {
-  background: #eff6ff;
-  color: #2563eb;
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
 }
 
 .insight-content h3 {
-  font-size: 16px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 8px;
+  font-size: 19px;
+  margin: 0 0 4px;
 }
 
 .insight-content p {
-  font-size: 14px;
-  color: #6b7280;
-  line-height: 1.5;
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+@media (max-width: 720px) {
+  .analytics-header {
+    align-items: stretch;
+  }
+
+  .header-controls {
+    width: 100%;
+  }
+
+  .time-range-selector {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .time-btn {
+    flex: 1;
+  }
+
+  .chart-grid {
+    height: 170px;
+  }
+
+  .chart-column .chart-bars {
+    height: 130px;
+  }
 }

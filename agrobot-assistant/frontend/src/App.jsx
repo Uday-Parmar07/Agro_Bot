@@ -11,6 +11,7 @@ import DiseaseCheckup from './pages/DiseaseCheckup';
 import GovernmentSchemes from './pages/GovernmentSchemes';
 import MandiPrices from './pages/MandiPrices';
 import AdvisorDashboard from './pages/AdvisorDashboard';
+import NotFound from './pages/NotFound';
 import './App.css';
 
 // Protected Route Component
@@ -114,8 +115,8 @@ function AppRoutes() {
         </RoleRoute>
       } />
       
-      {/* Catch all route */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* A real 404 instead of a silent redirect to "/". */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

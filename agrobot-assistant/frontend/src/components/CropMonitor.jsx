@@ -59,13 +59,14 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, sho
     }
   };
 
-  const getHealthColor = (health) => {
+  // Health tones come from the Organic ramps, not ad-hoc hexes.
+  const healthTone = (health) => {
     switch (health) {
-      case 'Excellent': return '#34d399';
-      case 'Good': return '#60a5fa';
-      case 'Warning': return '#fbbf24';
-      case 'Critical': return '#f87171';
-      default: return '#94a3b8';
+      case 'Excellent':
+      case 'Good': return 'tag tag-good';
+      case 'Warning': return 'tag tag-caution';
+      case 'Critical': return 'tag tag-urgent';
+      default: return 'tag tag-unknown';
     }
   };
 
@@ -107,15 +108,8 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, sho
             </div>
 
             <div className="health-indicator">
-              <span 
-                className="health-badge"
-                style={{ 
-                  backgroundColor: getHealthColor(crop.health) + '20',
-                  color: getHealthColor(crop.health),
-                  border: `1px solid ${getHealthColor(crop.health)}40`
-                }}
-              >
-                <Leaf size={14} />
+              <span className={`health-badge ${healthTone(crop.health)}`}>
+                <Leaf size={14} strokeWidth={2.75} />
                 {crop.health}
               </span>
             </div>
@@ -127,7 +121,7 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, sho
                 </div>
                 <div className="metric-data">
                   <span className="metric-label">Soil Moisture</span>
-                  <span className="metric-value">{crop.moisture === null ? 'Not assessed' : `${crop.moisture}%`}</span>
+                  <span className={`metric-value${crop.moisture === null ? ' unknown' : ''}`}>{crop.moisture === null ? 'Not assessed' : `${crop.moisture}%`}</span>
                 </div>
               </div>
 
@@ -137,7 +131,7 @@ const CropMonitor = ({ crops = [], onAddCrop, onRemoveCrop, recommendations, sho
                 </div>
                 <div className="metric-data">
                   <span className="metric-label">Temperature</span>
-                  <span className="metric-value">{crop.temperature === null ? 'Not assessed' : `${crop.temperature}°C`}</span>
+                  <span className={`metric-value${crop.temperature === null ? ' unknown' : ''}`}>{crop.temperature === null ? 'Not assessed' : `${crop.temperature}°C`}</span>
                 </div>
               </div>
             </div>

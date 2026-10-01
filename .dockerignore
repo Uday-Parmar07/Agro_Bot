@@ -1,17 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Single .dockerignore for the repository.
+#
+# Docker reads .dockerignore from the BUILD CONTEXT root, so this file applies
+# to builds run from the repo root:
+#
+#     docker build -t agrobot-app:latest .        # root Dockerfile
+#
+# Paths below are therefore written relative to the repo root. See
+# docs/neon-aws-deployment.md for the documented production build.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── VCS, editors, OS cruft ───────────────────────────────────────────────────
 .git
+.gitignore
+.github
+.vscode
+.idea
 .DS_Store
+**/.DS_Store
+
+# ── Secrets and local config ─────────────────────────────────────────────────
+# .env.production is excluded on purpose: the root Dockerfile sets
+# REACT_APP_API_URL=/api, and shipping the file would risk CRA picking up the
+# stale Azure host baked into it.
+**/.env
+**/.env.*
+
+# ── Python ───────────────────────────────────────────────────────────────────
 **/__pycache__
-**/*.pyc
-**/*.pyo
-**/*.pyd
+**/*.py[cod]
+**/*.so
+**/*.egg-info
 **/.pytest_cache
 **/.mypy_cache
 **/.ruff_cache
+**/.venv
+**/venv
+.venv
+
+# ── Node / frontend ──────────────────────────────────────────────────────────
 **/node_modules
-**/.env
-**/.env.*
-agrobot-assistant/backend/Dataset
-agrobot-assistant/backend/.venv
 agrobot-assistant/frontend/build
 agrobot-assistant/frontend/.cache
+agrobot-assistant/frontend/.parcel-cache
+agrobot-assistant/frontend/.eslintcache
+
+# ── Training data and ML scripts — not needed at runtime ─────────────────────
+# These are the largest exclusions in the repo (~378 MB).
+agrobot-assistant/backend/Dataset
+agrobot-assistant/backend/ml-cnn
+agrobot-assistant/backend/Plant_Disease
+agrobot-assistant/backend/train_*.py
+agrobot-assistant/backend/split_dataset.py
+**/*.ipynb
+
+# ── Tests and local debug scripts ────────────────────────────────────────────
+agrobot-assistant/backend/tests
+agrobot-assistant/backend/test_*.py
+agrobot-assistant/backend/debug_db.py
+
+# ── Local databases and logs ─────────────────────────────────────────────────
+**/*.sqlite3
+**/agrobot.db
+**/*.log
+
+# ── Documentation and design assets ──────────────────────────────────────────
+docs
 redesign-context
+Website redesign
+Website redesign.zip
+AgroBot Mandi Prices.html
+*.md
+!README.md
