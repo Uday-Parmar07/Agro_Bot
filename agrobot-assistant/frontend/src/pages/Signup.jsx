@@ -2,9 +2,15 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Leaf, Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react';
+import usePageMeta from '../hooks/usePageMeta';
 import './Auth.css';
 
 const Signup = () => {
+  usePageMeta({
+    title: 'Create your free account – AgroBot',
+    description: 'Sign up for AgroBot in five short steps and get crop advice for your soil, a leaf disease check, mandi prices and government schemes — in English and हिंदी.',
+    path: '/signup',
+  });
   const [formData, setFormData] = useState({
     email: '',
     password: '',

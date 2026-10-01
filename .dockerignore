@@ -49,6 +49,9 @@ agrobot-assistant/frontend/.eslintcache
 # These are the largest exclusions in the repo (~378 MB).
 agrobot-assistant/backend/Dataset
 agrobot-assistant/backend/ml-cnn
+# ...except the disease model weights that disease_inference_service.py loads.
+!agrobot-assistant/backend/ml-cnn/artifacts/checkpoints/best_model.pt
+!agrobot-assistant/backend/ml-cnn/artifacts/checkpoints/classes.json
 agrobot-assistant/backend/Plant_Disease
 agrobot-assistant/backend/train_*.py
 agrobot-assistant/backend/split_dataset.py

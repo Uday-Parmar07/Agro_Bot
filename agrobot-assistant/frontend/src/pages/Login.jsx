@@ -2,9 +2,15 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Leaf, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import usePageMeta from '../hooks/usePageMeta';
 import './Auth.css';
 
 const Login = () => {
+  usePageMeta({
+    title: 'Log in – AgroBot',
+    description: 'Log in to AgroBot to see crop advice, disease checks, mandi prices and schemes for your farm.',
+    path: '/login',
+  });
   const [formData, setFormData] = useState({
     email: '',
     password: ''

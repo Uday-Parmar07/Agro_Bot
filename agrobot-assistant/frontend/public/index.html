@@ -2,7 +2,10 @@
 <html lang="en-IN">
   <head>
     <meta charset="utf-8" />
-    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/apple-touch-icon.png" />
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f5ead8" />
     <meta
@@ -10,6 +13,56 @@
       content="AgroBot is an AI farming assistant for Indian farmers. Get crop recommendations for your soil, check plant disease from a leaf photo, see today's mandi prices and find government schemes — in English and हिंदी."
     />
     <title>AgroBot – AI Farming Assistant for Indian Farmers</title>
+    <!-- Per-page values are updated by src/hooks/usePageMeta.js and baked into
+         the static HTML by scripts/prerender.js. -->
+    <link rel="canonical" href="https://www.agrobot.in/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="AgroBot" />
+    <meta property="og:locale" content="en_IN" />
+    <meta property="og:url" content="https://www.agrobot.in/" />
+    <meta property="og:title" content="AgroBot – AI Farming Assistant for Indian Farmers" />
+    <meta property="og:description" content="Crop advice for your soil, a leaf disease check, today's mandi prices and government schemes — in English and हिंदी." />
+    <meta property="og:image" content="https://www.agrobot.in/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="AgroBot — Know what your farm needs today." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AgroBot – AI Farming Assistant for Indian Farmers" />
+    <meta name="twitter:description" content="Crop advice for your soil, a leaf disease check, today's mandi prices and government schemes — in English and हिंदी." />
+    <meta name="twitter:image" content="https://www.agrobot.in/og-image.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://www.agrobot.in/#organization",
+            "name": "AgroBot",
+            "url": "https://www.agrobot.in/",
+            "logo": "https://www.agrobot.in/icon-512.png"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://www.agrobot.in/#website",
+            "name": "AgroBot",
+            "url": "https://www.agrobot.in/",
+            "inLanguage": ["en-IN", "hi-IN"],
+            "publisher": { "@id": "https://www.agrobot.in/#organization" }
+          },
+          {
+            "@type": "WebApplication",
+            "name": "AgroBot",
+            "url": "https://www.agrobot.in/",
+            "applicationCategory": "LifestyleApplication",
+            "operatingSystem": "Any (web browser)",
+            "description": "AI farming assistant for Indian farmers: crop recommendations, plant disease check from a leaf photo, mandi prices and government schemes, in English and Hindi.",
+            "inLanguage": ["en-IN", "hi-IN"],
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+            "publisher": { "@id": "https://www.agrobot.in/#organization" }
+          }
+        ]
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">

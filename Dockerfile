@@ -2,12 +2,17 @@ FROM node:20-bookworm-slim AS frontend-builder
 
 WORKDIR /work/frontend
 
+# Chromium is only used here, by scripts/prerender.js; it never reaches the runtime image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium fonts-noto-core \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY agrobot-assistant/frontend/package*.json ./
 RUN npm install
 
 COPY agrobot-assistant/frontend/ ./
 ENV REACT_APP_API_URL=/api
-RUN npm run build
+RUN npm run build && CHROME_PATH=/usr/bin/chromium npm run prerender
 
 
 FROM python:3.10-slim-bookworm AS backend-builder
@@ -33,7 +38,20 @@ RUN pip install --prefix=/install/deps --no-warn-script-location \
     python-dotenv==1.0.0 \
     groq==0.4.1 \
     tavily-python \
-    "Pillow>=10.0.0"
+    "Pillow>=10.0.0" \
+    numpy==2.2.6 \
+    pandas==2.3.3 \
+    scikit-learn==1.7.2 \
+    joblib==1.5.3 \
+    xgboost-cpu==3.2.0
+# numpy/pandas/scikit-learn/joblib/xgboost are pinned to the versions that
+# artifacts/xgboost_crop_model.joblib was saved with.
+
+# CPU-only PyTorch for the disease model; the default wheel pulls in CUDA.
+RUN pip install --prefix=/install/deps --no-warn-script-location \
+    --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.org/simple \
+    torch==2.10.0+cpu torchvision==0.25.0+cpu
 
 COPY agrobot-assistant/backend/ ./
 

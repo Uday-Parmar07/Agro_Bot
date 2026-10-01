@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /questionnaire
+Disallow: /dashboard
+Disallow: /analytics
+Disallow: /disease-checkup
+Disallow: /government-schemes
+Disallow: /mandi-prices
+Disallow: /advisor
+
+Sitemap: https://www.agrobot.in/sitemap.xml

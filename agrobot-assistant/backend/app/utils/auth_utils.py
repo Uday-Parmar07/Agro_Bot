@@ -13,7 +13,10 @@ import os
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=10)
 
 # JWT settings
-SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-change-in-production')
+SECRET_KEY = os.getenv('SECRET_KEY', '').strip()
+if not SECRET_KEY:
+    # Refuse to start rather than sign tokens with a key anyone can read in this repo.
+    raise RuntimeError("SECRET_KEY environment variable must be set")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 

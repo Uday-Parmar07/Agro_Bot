@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from fastapi import FastAPI, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import analytics, auth, advisor, dashboard, farms, mandi_prices, questionnaire, recommendations, schemes, disease, users, voice, weather
 from app.database.migrations import run_migrations
@@ -64,24 +64,46 @@ async def health_check():
     return {"status": "ok"}
 
 
+# Public pages pre-rendered to static HTML by frontend/scripts/prerender.js.
+PRERENDERED_PAGES = {"login": "login.html", "signup": "signup.html"}
+# Logged-in routes from frontend/src/App.jsx. They get the plain app shell;
+# any other path is a real 404 so search engines don't index soft-404s.
+APP_ROUTES = {
+    "questionnaire", "dashboard", "analytics", "disease-checkup",
+    "government-schemes", "mandi-prices", "advisor",
+}
+
+
+def _frontend_file(name: str) -> Path:
+    path = FRONTEND_BUILD_DIR / name
+    # Older builds (or a build without the prerender step) only have index.html.
+    return path if path.exists() else FRONTEND_INDEX
+
+
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str):
 
     if full_path.startswith("api/") or full_path == "api":
-        return {"detail": "Not Found"}
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
 
     requested_file = (FRONTEND_BUILD_DIR / full_path).resolve()
     if FRONTEND_BUILD_DIR.exists() and requested_file.is_file():
         try:
             requested_file.relative_to(FRONTEND_BUILD_DIR)
         except ValueError:
-            return {"detail": "Not Found"}
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
         return FileResponse(requested_file)
 
-    if FRONTEND_INDEX.exists():
-        return FileResponse(FRONTEND_INDEX)
+    if not FRONTEND_INDEX.exists():
+        return {"detail": "Frontend build not found"}
 
-    return {"detail": "Frontend build not found"}
+    route = full_path.strip("/")
+    if route in PRERENDERED_PAGES:
+        return FileResponse(_frontend_file(PRERENDERED_PAGES[route]))
+    if route in APP_ROUTES:
+        return FileResponse(_frontend_file("app.html"))
+    # The React app still renders its NotFound page from the shell.
+    return FileResponse(_frontend_file("app.html"), status_code=404)
 
 if __name__ == "__main__":
     import uvicorn
