@@ -1,8 +1,8 @@
 # Move AgroBot to Neon and AWS
 
 This guide moves AgroBot data into Neon PostgreSQL and deploys the app on AWS
-from the root `Dockerfile`, which builds the React frontend and FastAPI backend
-into one container.
+ECS Fargate from the root `Dockerfile`, which builds the React frontend and
+FastAPI backend into one container.
 
 ## 1. Create Neon database
 
@@ -85,55 +85,94 @@ Repeat for `GROQ_API_KEY`, `OPENWEATHER_API_KEY`, `TAVILY_API_KEY`, and
 
 ## 4. Build and push image to ECR
 
-Authenticate Docker to ECR:
-
-```bash
-AWS_PROFILE=agro-deploy aws ecr get-login-password --region eu-north-1 \
-  | docker login --username AWS --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com
-```
-
-Build and push the app image from the repo root:
+App Runner is not available in `eu-north-1`, so production runs on ECS
+Fargate (x86_64). Build for `linux/amd64` even on an Apple Silicon Mac, and
+tag each image with the commit and a timestamp:
 
 ```bash
 cd /Users/uday/Development/Agro-Bot
 
-docker build -t agrobot-app:latest .
+REPO=<AWS_ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/agrobot-app
+TAG="$(git rev-parse --short HEAD)-$(date +%Y%m%d%H%M)"
 
-docker tag agrobot-app:latest \
-  <AWS_ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/agrobot-app:latest
+AWS_PROFILE=agro-deploy aws ecr get-login-password --region eu-north-1 \
+  | docker login --username AWS --password-stdin "${REPO%%/*}"
 
-docker push <AWS_ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/agrobot-app:latest
+docker build --platform linux/amd64 -t "agrobot-app:${TAG}" .
+docker tag "agrobot-app:${TAG}" "${REPO}:${TAG}"
+docker push "${REPO}:${TAG}"
 ```
 
-## 5. Deploy on AWS App Runner
+Always brace the variable (`"${REPO}:${TAG}"`). In zsh, an unbraced
+`$REPO:latest` applies the `:l` modifier and pushes to a repository named
+`agrobot-appatest` instead.
 
-Create an App Runner service from the private ECR image:
+The image layers are large (CPU PyTorch). If a push fails with `broken pipe`
+or a DNS error from Docker Desktop, run `docker push` again; finished layers
+are skipped.
 
-- Repository type: Container registry
-- Provider: Amazon ECR
-- Image: `<AWS_ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com/agrobot-app:latest`
-- Port: `8000`
-- Health check path: `/api/health`
-- Environment variables:
-  - `CORS_ORIGINS=https://<your-app-runner-or-custom-domain>`
-  - `RUN_MIGRATIONS=false`
-- Environment secrets:
-  - `DATABASE_URL` -> `agrobot/DATABASE_URL`
-  - `DATABASE_URL_UNPOOLED` -> `agrobot/DATABASE_URL_UNPOOLED`
-  - `SECRET_KEY` -> `agrobot/SECRET_KEY`
-  - API keys as needed
+## 5. Deploy on ECS Fargate
 
-The App Runner instance role must be allowed to read the Secrets Manager
-secrets referenced as environment secrets.
+Production resources (region `eu-north-1`):
+
+| Resource | Name |
+| --- | --- |
+| ECS cluster | `Agrobot` |
+| ECS service | `agrobot-app-service` (Fargate, 1 task) |
+| Task definition family | `agrobot-app` (1 vCPU, 2 GB, `awsvpc`) |
+| Execution role | `AgrobotTaskExecutionRole` |
+| Load balancer | `agrobot-alb` → target group `agrobot-tg` (port 8000) |
+| Logs | CloudWatch group `/ecs/agrobot-app` |
+| DNS | `www.agrobot.in` via Cloudflare |
+
+The container listens on port `8000` and has a container health check on
+`/api/health`. Environment variables are `CORS_ORIGINS` and
+`RUN_MIGRATIONS=false`. Secrets come from Secrets Manager (`agrobot/*`):
+`SECRET_KEY`, `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `GROQ_API_KEY`,
+`TAVILY_API_KEY`, `OPENWEATHER_API_KEY`, `AGMARKNET_API_KEY`. The execution
+role must be allowed to read them.
+
+Task definitions pin the image by digest, so pushing a tag alone deploys
+nothing. Register a new revision that copies the current one with only the
+image changed, then point the service at it:
+
+```bash
+export AWS_PROFILE=agro-deploy AWS_REGION=eu-north-1
+
+DIGEST=$(aws ecr describe-images --repository-name agrobot-app \
+  --image-ids imageTag="${TAG}" --query 'imageDetails[0].imageDigest' --output text)
+
+CURRENT=$(aws ecs describe-services --cluster Agrobot --services agrobot-app-service \
+  --query 'services[0].taskDefinition' --output text)
+
+aws ecs describe-task-definition --task-definition "${CURRENT}" --query taskDefinition \
+  | jq --arg img "${REPO}@${DIGEST}" '.containerDefinitions[0].image = $img
+      | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
+            .compatibilities, .registeredAt, .registeredBy, .deregisteredAt)' \
+  > /tmp/agrobot-taskdef.json
+
+NEW=$(aws ecs register-task-definition --cli-input-json file:///tmp/agrobot-taskdef.json \
+  --query taskDefinition.taskDefinitionArn --output text)
+
+aws ecs update-service --cluster Agrobot --service agrobot-app-service \
+  --task-definition "${NEW}"
+
+aws ecs wait services-stable --cluster Agrobot --services agrobot-app-service
+```
+
+To roll back, run `aws ecs update-service` with the previous revision
+(`agrobot-app:<N>`).
 
 ## 6. Production checks
 
 After deployment:
 
 ```bash
-curl https://<app-runner-domain>/api/health
-curl https://<app-runner-domain>/api/auth/me
+curl https://www.agrobot.in/api/health
+curl https://www.agrobot.in/api/auth/me
+curl https://www.agrobot.in/ads.txt
+curl -s -o /dev/null -w '%{http_code}\n' https://www.agrobot.in/sitemap.xml
 ```
 
 The second command should return an auth error. That is expected; it confirms
-the API route is live.
+the API route is live. `ads.txt` should list the AdSense publisher ID.
