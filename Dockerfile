@@ -11,7 +11,8 @@ COPY agrobot-assistant/frontend/package*.json ./
 RUN npm install
 
 COPY agrobot-assistant/frontend/ ./
-ENV REACT_APP_API_URL=/api
+ENV REACT_APP_API_URL=/api \
+    GENERATE_SOURCEMAP=false
 RUN npm run build && CHROME_PATH=/usr/bin/chromium npm run prerender
 
 
@@ -23,17 +24,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /work/backend
 
 RUN pip install --prefix=/install/deps --no-warn-script-location \
-    fastapi==0.104.1 \
+    fastapi==0.141.1 \
+    starlette==1.6.0 \
     uvicorn==0.24.0 \
-    "pydantic[email]==2.5.0" \
+    "pydantic[email]==2.12.5" \
     sqlalchemy==2.0.23 \
     alembic==1.13.1 \
     psycopg2-binary==2.9.9 \
     "psycopg[binary]==3.2.1" \
-    "python-jose[cryptography]==3.3.0" \
+    "python-jose[cryptography]==3.5.0" \
     "passlib[bcrypt]==1.7.4" \
     bcrypt==3.2.2 \
-    python-multipart==0.0.6 \
+    python-multipart==0.0.32 \
+    slowapi==0.1.10 \
     httpx==0.25.2 \
     python-dotenv==1.0.0 \
     groq==0.4.1 \

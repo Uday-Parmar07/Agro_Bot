@@ -60,8 +60,7 @@ def _set_role_and_link(advisor_email: str, farmer_email: str):
 
 async def test_expansion_endpoints():
     transport = httpx.ASGITransport(app=app)
-    await app.router.startup()
-    try:
+    async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             farmer = await _signup(client, "farmer@example.com")
             advisor = await _signup(client, "advisor@example.com")
@@ -153,8 +152,6 @@ async def test_expansion_endpoints():
             advisor_list = await client.get("/api/advisor/farmers", headers=advisor_headers)
             advisor_list.raise_for_status()
             assert advisor_list.json()[0]["email"] == "farmer@example.com"
-    finally:
-        await app.router.shutdown()
 
 
 if __name__ == "__main__":

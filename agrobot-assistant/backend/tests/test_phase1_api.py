@@ -93,8 +93,7 @@ async def _complete_questionnaire(client: httpx.AsyncClient, headers: dict):
 
 async def test_phase1_endpoints():
     transport = httpx.ASGITransport(app=app)
-    await app.router.startup()
-    try:
+    async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             headers = await _auth_headers(client)
             await _complete_questionnaire(client, headers)
@@ -144,8 +143,6 @@ async def test_phase1_endpoints():
 
             removed = await client.delete(f"/api/dashboard/crops/{crop_id}", headers=headers)
             removed.raise_for_status()
-    finally:
-        await app.router.shutdown()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Depends
 from fastapi.responses import FileResponse, JSONResponse
@@ -6,12 +7,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import analytics, auth, advisor, dashboard, farms, mandi_prices, questionnaire, recommendations, schemes, disease, users, voice, weather
 from app.database.migrations import run_migrations
 from app.services.crop_prediction_service import crop_prediction_service
+from app.utils.rate_limit import limiter, rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+# Interactive docs publish the full API surface; opt in for local development only.
+ENABLE_API_DOCS = os.getenv("ENABLE_API_DOCS", "false").lower() in {"1", "true", "yes"}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if os.getenv("RUN_MIGRATIONS", "true").lower() in {"1", "true", "yes"}:
+        run_migrations()
+    crop_prediction_service.validate_catalog_at_startup()
+    yield
+
 
 app = FastAPI(
     title="AgroBot API",
     description="AI-powered agricultural assistant backend",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs" if ENABLE_API_DOCS else None,
+    redoc_url="/redoc" if ENABLE_API_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
+    lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # CORS middleware for frontend
 cors_origins = os.getenv("CORS_ORIGINS", "").strip()
@@ -45,12 +67,6 @@ app.include_router(schemes.router, prefix="/api/schemes", tags=["Schemes"])
 BASE_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_BUILD_DIR = BASE_DIR / "frontend" / "build"
 FRONTEND_INDEX = FRONTEND_BUILD_DIR / "index.html"
-
-@app.on_event("startup")
-async def startup_event():
-    if os.getenv("RUN_MIGRATIONS", "true").lower() in {"1", "true", "yes"}:
-        run_migrations()
-    crop_prediction_service.validate_catalog_at_startup()
 
 @app.get("/")
 async def root():

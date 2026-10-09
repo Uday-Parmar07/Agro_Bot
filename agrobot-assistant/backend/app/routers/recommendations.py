@@ -1,7 +1,7 @@
 import logging
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
@@ -18,6 +18,7 @@ from app.services.crop_ranking_service import RANKING_CONFIG
 from app.services.farm_service import get_existing_user_farm
 from app.services.government_api_service import generate_government_schemes
 from app.utils.auth_utils import get_current_user
+from app.utils.rate_limit import limiter, user_or_ip
 
 
 logger = logging.getLogger(__name__)
@@ -331,12 +332,15 @@ def _questionnaire_user_data(current_user: User, responses: list[QuestionnaireRe
     return user_data
 
 
-@router.post("/generate", response_model=AIRecommendationResponse)
-async def generate_recommendations(
-    farm_id: int | None = None,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+# Generate and refresh both run the model plus an LLM call, so they share one quota.
+GENERATION_LIMIT = "5/minute;30/hour"
+
+
+async def _generate_recommendations(
+    farm_id: int | None,
+    current_user: User,
+    db: Session,
+) -> AIRecommendationResponse:
     if not current_user.onboarding_completed:
         raise HTTPException(status_code=400, detail="Please complete the questionnaire first")
     farm = get_existing_user_farm(db, current_user, farm_id)
@@ -372,13 +376,26 @@ async def generate_recommendations(
         raise HTTPException(status_code=500, detail="Recommendation generation failed safely") from exc
 
 
-@router.post("/refresh", response_model=AIRecommendationResponse)
-async def refresh_recommendations(
+@router.post("/generate", response_model=AIRecommendationResponse)
+@limiter.shared_limit(GENERATION_LIMIT, scope="recommendation-generation", key_func=user_or_ip)
+async def generate_recommendations(
+    request: Request,
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return await generate_recommendations(farm_id, current_user, db)
+    return await _generate_recommendations(farm_id, current_user, db)
+
+
+@router.post("/refresh", response_model=AIRecommendationResponse)
+@limiter.shared_limit(GENERATION_LIMIT, scope="recommendation-generation", key_func=user_or_ip)
+async def refresh_recommendations(
+    request: Request,
+    farm_id: int | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return await _generate_recommendations(farm_id, current_user, db)
 
 
 @router.get("/latest", response_model=AIRecommendationResponse)
@@ -428,7 +445,9 @@ def _build_user_profile_from_responses(responses):
 
 
 @router.get("/government-schemes")
+@limiter.limit("5/minute;30/hour", key_func=user_or_ip)
 async def get_government_schemes(
+    request: Request,
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

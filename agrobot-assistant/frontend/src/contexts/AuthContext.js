@@ -4,6 +4,15 @@ import i18n from '../i18n';
 
 const AuthContext = createContext();
 
+// FastAPI validation errors (422) return `detail` as a list of objects, which
+// React cannot render; fall back to the first message or a generic one.
+const errorMessage = (error, fallback) => {
+  const detail = error.response?.data?.detail;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && typeof detail[0]?.msg === 'string') return detail[0].msg;
+  return fallback;
+};
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -73,7 +82,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return { 
         success: false, 
-        error: error.response?.data?.detail || 'Login failed' 
+        error: errorMessage(error, 'Login failed') 
       };
     }
   };
@@ -95,7 +104,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return { 
         success: false, 
-        error: error.response?.data?.detail || 'Signup failed' 
+        error: errorMessage(error, 'Signup failed') 
       };
     }
   };

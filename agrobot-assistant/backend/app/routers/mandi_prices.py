@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.database.connection import get_db
@@ -13,6 +13,7 @@ from app.services.farm_service import get_user_farm
 from app.services.crop_news_service import crop_news_service
 from app.services.mandi_price_service import mandi_price_service
 from app.utils.auth_utils import get_current_user
+from app.utils.rate_limit import limiter, user_or_ip
 
 router = APIRouter()
 
@@ -57,7 +58,9 @@ def _find_crop(db: Session, farm_id: int, crop_name: str) -> FarmCrop | None:
 
 
 @router.get("/current", response_model=MandiCurrentResponse)
+@limiter.limit("60/minute", key_func=user_or_ip)
 async def get_current_mandi_prices(
+    request: Request,
     farm_id: int | None = None,
     crop: str = Query(..., min_length=1),
     market: str | None = Query(None, min_length=1),
@@ -82,7 +85,9 @@ async def get_current_mandi_prices(
 
 
 @router.get("/compare", response_model=MandiCompareResponse)
+@limiter.limit("60/minute", key_func=user_or_ip)
 async def compare_mandi_prices(
+    request: Request,
     farm_id: int | None = None,
     crop: str = Query(..., min_length=1),
     radius_km: float = Query(250, gt=0, le=2000),
@@ -101,7 +106,9 @@ async def compare_mandi_prices(
 
 
 @router.get("/trend", response_model=MandiTrendResponse)
+@limiter.limit("60/minute", key_func=user_or_ip)
 async def get_mandi_price_trend(
+    request: Request,
     market: str = Query(..., min_length=1),
     crop: str = Query(..., min_length=1),
     days: int = Query(30, ge=7, le=30),
@@ -117,7 +124,9 @@ async def get_mandi_price_trend(
 
 
 @router.get("/news", response_model=CropMarketNewsResponse)
+@limiter.limit("10/minute;60/hour", key_func=user_or_ip)
 async def get_crop_market_news(
+    request: Request,
     crop: str = Query(..., min_length=1),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

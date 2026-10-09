@@ -1,14 +1,21 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from app.database.schemas import User
 from app.services.ai_service import ai_service
 from app.utils.auth_utils import get_current_user
+from app.utils.rate_limit import limiter, user_or_ip
+from app.utils.uploads import read_upload_limited
 
 router = APIRouter()
 
+# Groq's Whisper endpoint rejects files above 25 MB.
+MAX_AUDIO_BYTES = 25 * 1024 * 1024
+
 
 @router.post("/transcribe")
+@limiter.limit("20/minute;200/hour", key_func=user_or_ip)
 async def transcribe_voice(
+    request: Request,
     audio: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ):
@@ -18,7 +25,7 @@ async def transcribe_voice(
             detail="Please upload a valid audio file",
         )
 
-    content = await audio.read()
+    content = await read_upload_limited(audio, MAX_AUDIO_BYTES)
     if not content:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

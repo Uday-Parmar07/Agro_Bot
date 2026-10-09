@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.models.user import UserCreate, UserLogin, UserResponse, Token
 from app.database.connection import get_db
 from app.utils.auth_utils import create_access_token, verify_password_async, hash_password_async, get_current_user
+from app.utils.rate_limit import limiter
 from app.database.schemas import User
 from datetime import timedelta
 
@@ -11,7 +12,8 @@ router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 @router.post("/signup", response_model=Token)
-async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute;50/hour")
+async def signup(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     # Check if user already exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
@@ -52,7 +54,8 @@ async def signup(user_data: UserCreate, db: Session = Depends(get_db)):
     return Token(access_token=access_token, token_type="bearer", user=user_response)
 
 @router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("10/minute;100/hour")
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username).first()
     
     if not user or not await verify_password_async(form_data.password, user.hashed_password):

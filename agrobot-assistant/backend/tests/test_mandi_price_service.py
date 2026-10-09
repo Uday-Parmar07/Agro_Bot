@@ -479,8 +479,7 @@ async def _auth_headers(client: httpx.AsyncClient):
 
 async def test_mandi_lookup_endpoints_return_cached_locations_and_commodities():
     transport = httpx.ASGITransport(app=app)
-    await app.router.startup()
-    try:
+    async with app.router.lifespan_context(app):
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
             headers = await _auth_headers(client)
             locations = await client.get("/api/mandi-prices/locations", headers=headers)
@@ -502,8 +501,6 @@ async def test_mandi_lookup_endpoints_return_cached_locations_and_commodities():
             )
             commodities.raise_for_status()
             assert "Tomato" in commodities.json()["commodities"]
-    finally:
-        await app.router.shutdown()
 
 
 if __name__ == "__main__":

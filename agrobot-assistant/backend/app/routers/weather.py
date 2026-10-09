@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from datetime import date
 
@@ -7,6 +7,7 @@ from app.database.schemas import User, QuestionnaireResponse, WeatherSnapshot
 from app.services.farm_service import get_user_farm
 from app.services.weather_service import weather_service
 from app.utils.auth_utils import get_current_user
+from app.utils.rate_limit import limiter, user_or_ip
 
 router = APIRouter()
 
@@ -106,7 +107,9 @@ def _get_user_location(db: Session, user_id: int, farm_id: int):
 
 
 @router.get("/current")
+@limiter.limit("60/minute", key_func=user_or_ip)
 async def get_current_weather(
+    request: Request,
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -132,7 +135,9 @@ async def get_current_weather(
 
 
 @router.get("/forecast")
+@limiter.limit("60/minute", key_func=user_or_ip)
 async def get_weather_forecast(
+    request: Request,
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -153,7 +158,9 @@ async def get_weather_forecast(
 
 
 @router.get("/overview")
+@limiter.limit("60/minute", key_func=user_or_ip)
 async def get_weather_overview(
+    request: Request,
     farm_id: int | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
