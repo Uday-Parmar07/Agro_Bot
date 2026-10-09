@@ -9,12 +9,19 @@ from slowapi.errors import RateLimitExceeded
 from app.utils.auth_utils import ALGORITHM, SECRET_KEY
 
 
+# How many proxies in front of the app append to X-Forwarded-For. Each one
+# appends the address it received the request from, so the entry this many
+# places from the right is the real client; anything further left is
+# client-supplied and spoofable. Production is Cloudflare -> ALB, so 2.
+TRUSTED_PROXY_HOPS = max(1, int(os.getenv("TRUSTED_PROXY_HOPS", "1")))
+
+
 def client_ip(request: Request) -> str:
-    # Behind the ALB the right-most X-Forwarded-For entry is the address the
-    # ALB itself saw; anything to its left is client-supplied and spoofable.
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[-1].strip()
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        if hops:
+            return hops[-min(TRUSTED_PROXY_HOPS, len(hops))]
     return request.client.host if request.client else "unknown"
 
 

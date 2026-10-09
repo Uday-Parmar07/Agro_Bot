@@ -10,6 +10,7 @@ from starlette.requests import Request
 
 from app.main import app
 from app.routers.disease import MAX_IMAGE_BYTES
+from app.utils import rate_limit
 from app.utils.rate_limit import client_ip, limiter
 
 
@@ -24,6 +25,14 @@ def _request(headers: dict) -> Request:
 def test_client_ip_uses_address_appended_by_load_balancer():
     assert client_ip(_request({"X-Forwarded-For": "1.2.3.4, 203.0.113.9"})) == "203.0.113.9"
     assert client_ip(_request({})) == "10.0.0.5"
+
+
+def test_client_ip_skips_trusted_proxy_hops(monkeypatch):
+    # Cloudflare appends the client, then the ALB appends the Cloudflare edge.
+    monkeypatch.setattr(rate_limit, "TRUSTED_PROXY_HOPS", 2)
+    headers = {"X-Forwarded-For": "6.6.6.6, 198.51.100.7, 172.70.1.1"}
+    assert client_ip(_request(headers)) == "198.51.100.7"
+    assert client_ip(_request({"X-Forwarded-For": "198.51.100.7"})) == "198.51.100.7"
 
 
 async def test_security_limits():
