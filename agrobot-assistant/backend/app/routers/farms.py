@@ -4,10 +4,22 @@ from sqlalchemy.orm import Session
 from app.database.connection import get_db
 from app.database.schemas import Farm, User
 from app.models.farm import FarmCreate, FarmResponse
-from app.services.farm_service import get_or_create_default_farm
+from app.models.soil_assessment import SoilAssessment
+from app.services.farm_service import get_existing_user_farm, get_or_create_default_farm
+from app.services.soil_assessment_service import get_soil_assessment
 from app.utils.auth_utils import get_current_user
 
 router = APIRouter()
+
+
+@router.get("/{farm_id}/assessment", response_model=SoilAssessment)
+async def get_farm_assessment(
+    farm_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    farm = get_existing_user_farm(db, current_user, farm_id)
+    return get_soil_assessment(db, farm.id)
 
 
 @router.get("", response_model=list[FarmResponse])

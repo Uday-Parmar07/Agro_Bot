@@ -216,11 +216,9 @@ export const TodayOnFarm = ({ items }) => (
   </section>
 );
 
-export const StatusCards = ({ score, soilStatus, alertCount, taskCount, assessmentRoute }) => {
-  const scoreTone = score === null ? 'none' : score >= 7 ? 'good' : score >= 5 ? 'caution' : 'urgent';
-  const soilTone = soilStatus.toLowerCase().includes('good')
-    ? 'good'
-    : soilStatus.toLowerCase().includes('not assessed') ? 'none' : 'caution';
+export const StatusCards = ({ score, soilStatus, alertCount, taskCount, assessmentRoute, assessment, assessmentError }) => {
+  const scoreTone = score === null ? 'none' : score >= 7.5 ? 'good' : score >= 6 ? 'caution' : 'urgent';
+  const soilTone = scoreTone;
 
   const cards = [
     {
@@ -266,11 +264,30 @@ export const StatusCards = ({ score, soilStatus, alertCount, taskCount, assessme
           </article>
         ))}
       </div>
-      {score === null && (
+      {score !== null && assessment?.status === 'estimated' && (
+        <div className="assessment-empty">
+          <div>
+            <strong>Estimated soil screening score</strong>
+            <p>{assessment.explanation} The farm score summarises these same soil indicators.</p>
+            <details>
+              <summary>How this score is calculated</summary>
+              <p>Each indicator has equal weight. The score is their average out of 10.</p>
+              <ul>{Object.entries(assessment.components || {}).map(([field, value]) => (
+                <li key={field}>{field.replaceAll('_', ' ')}: {value}/10</li>
+              ))}</ul>
+            </details>
+          </div>
+        </div>
+      )}
+      {assessmentError && <p role="alert">{assessmentError}</p>}
+      {score === null && !assessmentError && (
         <div className="assessment-empty">
           <div>
             <strong>Farm health not assessed</strong>
-            <p>Complete farm details or add a soil test to generate an assessment.</p>
+            <p>Complete the soil observations and organic practices in your farm details to generate an estimated assessment.</p>
+            {assessment?.missing_fields?.length > 0 && (
+              <p>Still needed: {assessment.missing_fields.map((field) => field.replaceAll('_', ' ')).join(', ')}.</p>
+            )}
           </div>
           <a className="recommendation-action" href={assessmentRoute}>Complete assessment</a>
         </div>

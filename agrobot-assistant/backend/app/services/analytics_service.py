@@ -11,6 +11,7 @@ from app.models.analytics import (
     RecommendationAdoption,
     SoilScorePoint,
 )
+from app.services.soil_assessment_service import get_soil_assessment
 
 
 def build_analytics_overview(db: Session, farm_id: int) -> AnalyticsOverviewResponse:
@@ -100,10 +101,6 @@ def build_analytics_overview(db: Session, farm_id: int) -> AnalyticsOverviewResp
             adopted_count=adopted_count,
             adoption_rate=adoption_rate,
         ),
-        latest_soil_health_score=(
-            float(latest_recommendation.soil_health_score)
-            if latest_recommendation and latest_recommendation.soil_health_score is not None
-            else None
-        ),
+        latest_soil_health_score=get_soil_assessment(db, farm_id).score,
         weather_snapshot_count=weather_count,
     )

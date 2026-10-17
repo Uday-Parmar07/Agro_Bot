@@ -126,7 +126,7 @@ const Analytics = () => {
               <TrendingUp className="card-icon positive" />
             </div>
             <div className="card-value">{analyticsData.overview.soilScore}</div>
-            <div className="card-change positive">Latest generated recommendation</div>
+            <div className="card-change">Estimated from saved soil observations and practices</div>
           </div>
 
           <div className="overview-card">

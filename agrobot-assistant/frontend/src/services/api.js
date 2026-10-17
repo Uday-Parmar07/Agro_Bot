@@ -100,6 +100,11 @@ class ApiService {
     return response.data;
   }
 
+  async getFarmAssessment(farmId) {
+    const response = await api.get(`/farms/${farmId}/assessment`);
+    return response.data;
+  }
+
   async createFarm(farmData) {
     const response = await api.post('/farms', farmData);
     return response.data;

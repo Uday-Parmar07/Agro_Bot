@@ -49,6 +49,8 @@ const Dashboard = () => {
   const [recommendations, setRecommendations] = useState(null);
   const [weatherOverview, setWeatherOverview] = useState(null);
   const [questionnaire, setQuestionnaire] = useState({});
+  const [assessment, setAssessment] = useState(null);
+  const [assessmentError, setAssessmentError] = useState(null);
   const [userCrops, setUserCrops] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -75,19 +77,26 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!selectedFarmId) return;
+    let cancelled = false;
 
     const loadDashboardData = async () => {
       try {
         setLoading(true);
         setError(null);
+        setAssessmentError(null);
+        setAssessment(null);
 
-        const [recsResult, weatherResult, questionnaireResult, cropsResult] = await Promise.all([
+        const [recsResult, weatherResult, questionnaireResult, cropsResult, assessmentResult] = await Promise.all([
           ApiService.getLatestRecommendations(selectedFarmId).catch(() => null),
           ApiService.getWeatherOverview(selectedFarmId).catch(() => null),
           ApiService.getUserQuestionnaireResponses(selectedFarmId).catch(() => ({})),
           ApiService.getFarmCrops(selectedFarmId).catch(() => []),
+          ApiService.getFarmAssessment(selectedFarmId).catch(() => null),
         ]);
 
+        if (cancelled) return;
+        setAssessment(assessmentResult);
+        if (!assessmentResult) setAssessmentError('Could not load your farm assessment. Reload the page to retry.');
         setRecommendations(recsResult);
         setWeatherOverview(weatherResult);
         setQuestionnaire(questionnaireResult || {});
@@ -105,13 +114,15 @@ const Dashboard = () => {
           lastUpdated: 'from saved record',
         })));
       } catch (loadError) {
+        if (cancelled) return;
         setError('Failed to load dashboard data. Please retry.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     loadDashboardData();
+    return () => { cancelled = true; };
   }, [selectedFarmId]);
 
   const handleRefreshRecommendations = async () => {
@@ -209,15 +220,15 @@ const Dashboard = () => {
   }, [questionnaire, userCrops]);
 
   const farmHealthScore = useMemo(() => {
-    const score = Number(recommendations?.soil_health_score);
-    return Number.isFinite(score) && score > 0 ? score : null;
-  }, [recommendations]);
+    const score = assessment?.score;
+    return Number.isFinite(score) && score >= 0 && score <= 10 ? score : null;
+  }, [assessment]);
 
   const soilStatus = useMemo(() => {
     if (farmHealthScore === null) return 'Not assessed';
-    if (farmHealthScore >= 7.5) return 'Good';
+    if (farmHealthScore >= 7.5) return 'Favourable indicators';
     if (farmHealthScore >= 6) return 'Attention Needed';
-    return 'Critical';
+    return 'Needs review';
   }, [farmHealthScore]);
 
   const todayItems = useMemo(() => {
@@ -247,11 +258,11 @@ const Dashboard = () => {
   const alerts = useMemo(() => {
     const result = [];
 
-    if (recommendations?.soil_health_score !== null && recommendations?.soil_health_score !== undefined && recommendations.soil_health_score < 6.5) {
+    if (farmHealthScore !== null && farmHealthScore < 6) {
       result.push({
         level: 'warning',
-        title: 'Low soil health detected',
-        description: 'Soil improvement actions are recommended this week.',
+        title: 'Soil observations need review',
+        description: 'Your questionnaire indicates possible soil concerns. Confirm them with a soil test or local adviser.',
       });
     }
 
@@ -272,7 +283,7 @@ const Dashboard = () => {
     }
 
     return result;
-  }, [recommendations, weatherData]);
+  }, [farmHealthScore, weatherData]);
 
   const upcomingTasks = useMemo(() => {
     return (recommendations?.farming_calendar || []).slice(0, 5).map((event) => ({
@@ -378,7 +389,9 @@ const Dashboard = () => {
               soilStatus={soilStatus}
               alertCount={alerts.filter((alert) => alert.level !== 'good').length}
               taskCount={todayItems.length}
-              assessmentRoute={`/questionnaire?refill=1&farm_id=${selectedFarmId}&section=soil-fertility&field=soil_test_done`}
+              assessment={assessment}
+              assessmentError={assessmentError}
+              assessmentRoute={`/questionnaire?refill=1&farm_id=${selectedFarmId}&section=soil-physical`}
             />
 
             <div className="decision-grid-3">

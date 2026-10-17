@@ -20,6 +20,7 @@ from app.services.crop_catalog_service import crop_catalog_service
 from app.services.crop_prediction_service import crop_prediction_service
 from app.services.crop_ranking_service import RANKING_CONFIG, RankedCandidate, crop_ranking_service
 from app.services.farm_context_service import farm_context_service
+from app.services.soil_assessment_service import assess_soil
 from app.utils.prompt_generator import PROMPT_VERSION
 
 
@@ -32,6 +33,7 @@ class CropRecommendationService:
         user_data: dict[str, Any],
         preferred_language: str,
     ) -> AIRecommendationResponse:
+        soil_assessment = assess_soil(user_data)
         context, data_quality = await farm_context_service.build(db, farm_id, user_id, user_data)
         model_result = await crop_prediction_service.generate_candidates(context)
         knowledge_candidates = crop_catalog_service.find_knowledge_candidates(context)
@@ -82,6 +84,7 @@ class CropRecommendationService:
         global_warnings = self._global_warnings(data_quality, model_result.warnings)
         missing_inputs = self._missing_inputs(context)
         snapshot = {
+            "soil_assessment": soil_assessment.model_dump(mode="json"),
             "farm_context": context.model_dump(mode="json"),
             "model_feature_values": model_result.feature_values,
             "model_feature_columns": model_result.feature_columns,
@@ -98,6 +101,7 @@ class CropRecommendationService:
             },
         }
         common = {
+            "soil_health_score": soil_assessment.score,
             "user_id": user_id,
             "farm_id": farm_id,
             "coverage": coverage,
